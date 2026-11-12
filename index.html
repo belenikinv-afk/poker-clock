@@ -132,6 +132,22 @@
     color: var(--muted);
     font-size: clamp(16px, 2vw, 22px);
   }
+  .stack-line {
+    margin-top: 18px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+  .stack-line b {
+    display: block;
+    margin-top: 4px;
+    color: var(--paper);
+    font-size: clamp(32px, 5vw, 56px);
+    letter-spacing: -0.03em;
+  }
+  .fields .wide { grid-column: 1 / -1; }
   .next b { color: var(--paper); font-weight: 700; }
   .controls {
     display: flex;
@@ -327,7 +343,7 @@
 <body>
   <header class="top">
     <div>
-      <div class="kicker">HOLD'EM · 8 ИГРОКОВ</div>
+      <div class="kicker" id="tableKicker">HOLD'EM</div>
       <h1 id="levelTitle">Уровень 1</h1>
     </div>
     <div>
@@ -351,6 +367,7 @@
       <div class="blind ante"><span>АНТЕ</span><strong id="ante">—</strong></div>
     </div>
     <div class="next" id="nextLine">Дальше <b>уровень 2</b> · 200 / 400</div>
+    <div class="stack-line">СРЕДНИЙ СТЕК<b id="avgMain">—</b></div>
   </main>
 
   <footer class="controls" id="controls" hidden>
@@ -370,14 +387,18 @@
     <div class="panel">
       <div class="kicker">STRUCTURE CLOCK</div>
       <h2>Техасский холдем</h2>
-      <p>Восемь игроков. Уровень 15 минут. Ребай без лимита до конца 8-го уровня, аддон на десятиминутном перерыве, дальше игра на вылет.</p>
+      <p>Уровень 15 минут. Ребай без лимита до конца 8-го уровня, аддон на десятиминутном перерыве, дальше игра на вылет.</p>
       <ul class="start-list">
         <li>Старт — 30 000 фишек, блайнды 100 / 200</li>
         <li>Ребай — 30 000, пока стек не больше 30 000</li>
         <li>Аддон — 40 000 один раз, в 2:00</li>
         <li>У игроков только просмотр. Старт и пауза у ведущего</li>
       </ul>
-      <p id="viewerNote">Часы запустит ведущий. На этом экране видно текущий уровень и обратный отсчёт.</p>
+      <p id="viewerNote">Часы запустит ведущий. На этом экране видно текущий уровень, блайнды и средний стек.</p>
+      <label id="playersField" hidden>Игроков за столом
+        <input id="playersInput" type="number" min="2" max="18" step="1" inputmode="numeric" placeholder="8">
+      </label>
+      <p class="login-error" id="playersError"></p>
       <button class="primary" id="startBtn" type="button" hidden>Начать турнир</button>
     </div>
   </section>
@@ -394,7 +415,10 @@
             <input id="rebuyInput" type="number" min="0" step="1" value="0">
           </label>
           <label>Игроков осталось
-            <input id="aliveInput" type="number" min="2" max="8" step="1" value="8">
+            <input id="aliveInput" type="number" min="2" max="18" step="1" value="8">
+          </label>
+          <label class="wide">Взяли аддон
+            <input id="addonInput" type="number" min="0" max="18" step="1" value="0">
           </label>
         </div>
         <div class="avg" id="avgOut">Средний стек <b>—</b></div>
@@ -511,15 +535,27 @@ function nextInfo(st) {
   const row = rowAt(st.freezeIndex + 1, st.column);
   return "Дальше <b>уровень " + (10 + st.freezeIndex) + "</b> · " + money(row[0]) + " / " + money(row[1]);
 }
+function stackMath(st) {
+  const players = Math.max(0, Number(st.players) || 0);
+  const rebuys = Math.max(0, Number(st.rebuys) || 0);
+  const addons = Math.max(0, Number(st.addons) || 0);
+  let alive = Number(st.alive);
+  if (!alive || alive < 1) alive = players;
+  if (players) alive = Math.max(1, Math.min(players, alive));
+  const addonOn = st.phase === "break" || st.phase === "freeze";
+  const total = players * 30000 + rebuys * 30000 + (addonOn ? addons * 40000 : 0);
+  const avg = players && alive ? Math.round(total / alive) : null;
+  return { players: players, alive: alive, addons: addons, avg: avg };
+}
 function suggestView(copy) {
-  if (copy.columnTouched) return;
-  const alive = Math.max(2, Math.min(8, Number(copy.alive) || 8));
-  const rebuys = Math.max(0, Number(copy.rebuys) || 0);
-  const avg = Math.round((8 * 30000 + rebuys * 30000 + alive * 40000) / alive);
-  copy.avg = avg;
-  copy.suggested = avg <= 80000 ? 0 : avg <= 115000 ? 1 : avg <= 150000 ? 2 : 3;
+  if (copy.columnTouched) {
+    fillDerived(copy);
+    return;
+  }
+  fillDerived(copy);
+  if (copy.avg == null) return;
   copy.column = copy.suggested;
-  copy.skipFirst = avg > 200000;
+  copy.skipFirst = copy.avg > 200000;
 }
 function startView(copy, duration, now) {
   if (copy.running && copy.runSince) copy.elapsed = (copy.elapsed || 0) + now - copy.runSince;
@@ -615,7 +651,9 @@ function freshState() {
     column: 1,
     columnTouched: false,
     rebuys: 0,
-    alive: 8,
+    players: 0,
+    alive: 0,
+    addons: 0,
     skipFirst: false,
     elapsed: 0,
     runSince: 0,
@@ -623,10 +661,9 @@ function freshState() {
   };
 }
 function fillDerived(st) {
-  const alive = Math.max(2, Math.min(8, Number(st.alive) || 8));
-  const rebuys = Math.max(0, Number(st.rebuys) || 0);
-  st.avg = Math.round((8 * 30000 + rebuys * 30000 + alive * 40000) / alive);
-  st.suggested = st.avg <= 80000 ? 0 : st.avg <= 115000 ? 1 : st.avg <= 150000 ? 2 : 3;
+  const math = stackMath(st);
+  st.avg = math.avg;
+  st.suggested = math.avg == null ? 1 : math.avg <= 80000 ? 0 : math.avg <= 115000 ? 1 : math.avg <= 150000 ? 2 : 3;
 }
 function beginFreeze(st, now) {
   suggestView(st);
@@ -637,6 +674,11 @@ function beginFreeze(st, now) {
 function applyAction(st, kind, data) {
   const now = Date.now();
   if (kind === "start" && st.phase === "idle") {
+    const players = Math.max(0, Math.min(18, Number(data.players) || 0));
+    if (players < 2) return false;
+    st.players = players;
+    st.alive = players;
+    st.addons = 0;
     st.phase = "rebuy";
     st.rebuyIndex = 0;
     st.elapsed = 0;
@@ -710,8 +752,16 @@ function applyAction(st, kind, data) {
     return true;
   }
   if (kind === "alive") {
-    st.alive = Math.max(2, Math.min(8, Number(data.alive || 8)));
+    const players = Math.max(2, Number(st.players) || 18);
+    st.alive = Math.max(2, Math.min(players, Number(data.alive) || players));
+    if (Number(st.addons) > st.alive) st.addons = st.alive;
     if (st.phase === "break") suggestView(st);
+    return true;
+  }
+  if (kind === "addons") {
+    const cap = Math.max(0, Number(st.alive) || Number(st.players) || 0);
+    st.addons = Math.max(0, Math.min(cap, Number(data.addons) || 0));
+    if (st.phase === "break" || st.phase === "freeze") suggestView(st);
     return true;
   }
   if (kind === "column") {
@@ -797,10 +847,11 @@ function paint() {
   const left = leftMs(st);
   $("startScreen").hidden = !idle || !$("loginScreen").hidden;
   $("breakScreen").hidden = !onBreak;
+  $("playersField").hidden = !admin || !idle;
   $("controls").hidden = !admin || idle || onBreak;
   $("breakAdmin").hidden = !admin;
   $("breakText").textContent = admin
-    ? "Ребаи закрыты. Отметьте, сколько ребаев ушло за стол и сколько игроков ещё в игре. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке."
+    ? "Ребаи закрыты. Введите, сколько игроков ещё в игре и сколько из них взяли аддон. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке."
     : "Ребаи закрыты. Идёт перерыв на аддон. Вылет начнёт ведущий.";
   $("clock").textContent = fmt(left);
   $("clock").classList.toggle("warn", !idle && !onBreak && left <= 60000);
@@ -812,10 +863,15 @@ function paint() {
     $("breakPause").textContent = st.running ? "Пауза" : "Продолжить";
   }
   $("elapsed").textContent = idle ? "Турнир ещё не начат" : "В игре " + fmtElapsed(playedMs(st));
+  $("tableKicker").textContent = st.players ? "HOLD'EM · " + st.players + " ИГРОКОВ" : "HOLD'EM";
+  $("avgMain").textContent = st.avg == null ? "—" : money(st.avg);
   $("rebuyNum").textContent = String(st.rebuys);
   if (document.activeElement !== $("rebuyInput")) $("rebuyInput").value = st.rebuys;
-  if (document.activeElement !== $("aliveInput")) $("aliveInput").value = st.alive;
-  $("avgOut").innerHTML = "Средний стек <b>" + money(st.avg) + "</b>";
+  if (document.activeElement !== $("aliveInput")) $("aliveInput").value = st.alive || st.players || "";
+  if (document.activeElement !== $("addonInput")) $("addonInput").value = st.addons || 0;
+  $("aliveInput").max = String(st.players || 18);
+  $("addonInput").max = String(st.alive || st.players || 18);
+  $("avgOut").innerHTML = "Средний стек <b>" + (st.avg == null ? "—" : money(st.avg)) + "</b>";
   if (document.activeElement !== $("skipFirst")) $("skipFirst").checked = !!st.skipFirst;
 
   const phase = $("phase");
@@ -868,8 +924,15 @@ function onStart(event) {
   if (now - startLock < 700) return;
   startLock = now;
   if (event) event.preventDefault();
+  const players = Number($("playersInput").value);
+  if (!players || players < 2) {
+    $("playersError").textContent = "Укажите, сколько игроков за столом";
+    $("playersInput").focus();
+    return;
+  }
+  $("playersError").textContent = "";
   unlockAudio();
-  act("start");
+  act("start", { players: players });
 }
 $("startBtn").addEventListener("pointerup", onStart);
 $("startBtn").addEventListener("click", onStart);
@@ -887,7 +950,8 @@ $("rebuyInput").addEventListener("change", () => {
   const next = Math.max(0, Number($("rebuyInput").value) || 0);
   act("rebuy", { delta: next - snapshot.rebuys });
 });
-$("aliveInput").addEventListener("change", () => act("alive", { alive: Number($("aliveInput").value) || 8 }));
+$("aliveInput").addEventListener("change", () => act("alive", { alive: Number($("aliveInput").value) || 2 }));
+$("addonInput").addEventListener("change", () => act("addons", { addons: Number($("addonInput").value) || 0 }));
 $("skipFirst").addEventListener("change", () => act("skip", { skip: $("skipFirst").checked }));
 $("startFreeze").addEventListener("click", () => { unlockAudio(); act("startFreeze"); });
 $("soundBtn").addEventListener("click", () => {
