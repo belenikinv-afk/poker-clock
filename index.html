@@ -255,6 +255,30 @@
     gap: 12px;
     margin-bottom: 14px;
   }
+  .stepper {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+  }
+  .stepper input[type="number"] { margin-top: 0; text-align: center; }
+  .stepper button {
+    width: 48px;
+    flex: 0 0 48px;
+    padding: 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    background: #0c0c0d;
+    color: var(--paper);
+    border: 1px solid #3a3a3d;
+    border-radius: 4px;
+  }
+  .stepper button.plus {
+    background: var(--crimson-deep);
+    border-color: var(--crimson-deep);
+    color: white;
+  }
   label { display: block; color: var(--muted); font-size: 13px; font-weight: 700; }
   input[type="number"] {
     width: 100%;
@@ -411,8 +435,12 @@
       <p id="breakText">Ребаи закрыты. Идёт десятиминутный перерыв.</p>
       <div class="admin-only" id="breakAdmin">
         <div class="fields">
-          <label>Ребаев за столом
-            <input id="rebuyInput" type="number" min="0" step="1" value="0">
+          <label class="wide">Ребаев
+            <span class="stepper">
+              <button id="breakRebuyMinus" type="button" aria-label="Меньше ребаев">−</button>
+              <input id="rebuyInput" type="number" min="0" step="1" value="0">
+              <button id="breakRebuyPlus" class="plus" type="button" aria-label="Добавить ребай">+</button>
+            </span>
           </label>
           <label>Игроков осталось
             <input id="aliveInput" type="number" min="2" max="18" step="1" value="8">
@@ -851,8 +879,8 @@ function paint() {
   $("controls").hidden = !admin || idle || onBreak;
   $("breakAdmin").hidden = !admin;
   $("breakText").textContent = admin
-    ? "Ребаи закрыты. Введите, сколько игроков ещё в игре и сколько из них взяли аддон. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке."
-    : "Ребаи закрыты. Идёт перерыв на аддон. Вылет начнёт ведущий.";
+    ? "Укажите, сколько игроков ещё в игре и сколько взяли аддон. Если кто-то берёт ребай вместе с аддоном, добавьте его кнопкой +. Вылет начнётся по таймеру или сразу по кнопке."
+    : "Идёт перерыв на аддон. Вылет начнёт ведущий.";
   $("clock").textContent = fmt(left);
   $("clock").classList.toggle("warn", !idle && !onBreak && left <= 60000);
   $("breakClock").textContent = fmt(left);
@@ -945,6 +973,8 @@ $("resetBtn").addEventListener("click", () => {
 });
 $("rebuyPlus").addEventListener("click", () => act("rebuy", { delta: 1 }));
 $("rebuyMinus").addEventListener("click", () => act("rebuy", { delta: -1 }));
+$("breakRebuyPlus").addEventListener("click", () => act("rebuy", { delta: 1 }));
+$("breakRebuyMinus").addEventListener("click", () => act("rebuy", { delta: -1 }));
 $("rebuyInput").addEventListener("change", () => {
   if (!snapshot) return;
   const next = Math.max(0, Number($("rebuyInput").value) || 0);
