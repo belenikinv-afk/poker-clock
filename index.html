@@ -437,7 +437,7 @@
 <script>
 const LEVEL_MS = 15 * 60 * 1000;
 const BREAK_MS = 10 * 60 * 1000;
-const GH_STATE = "https://api.github.com/repos/belenikinv-afk/poker-clock/contents/state.json";
+const STORE = "https://mantledb.sh/v2/holdem-cb13c9bb/clock";
 const REBUY = [
   [100, 200, 0],
   [200, 400, 0],
@@ -458,10 +458,9 @@ const COLUMNS = [
 const $ = (id) => document.getElementById(id);
 let snapshot = null;
 let colSig = "";
-let remote = "local";
-let githubNext = 0;
 let offset = 0;
-let admin = false;
+let admin = sessionStorage.getItem("poker-host") === "1";
+let pendingSave = null;
 let soundOn = true;
 let audioCtx = null;
 let lastMark = "";
@@ -556,7 +555,7 @@ function advanceView(copy, now) {
 }
 function displayState() {
   if (!snapshot) return null;
-  if (remote !== "github" || !snapshot.running) return snapshot;
+  if (!snapshot.running) return snapshot;
   const copy = Object.assign({}, snapshot);
   let guard = 0;
   let now = Date.now();
@@ -605,60 +604,166 @@ function levelChime() {
   setTimeout(() => chime(880, 0.18), 140);
 }
 
-function applyRemote(data, fromServer) {
-  offset = fromServer ? data.serverNow - Date.now() : 0;
-  snapshot = data;
-  admin = fromServer && !!data.admin;
-  paint();
+function freshState() {
+  return {
+    phase: "idle",
+    running: false,
+    endsAt: 0,
+    remaining: LEVEL_MS,
+    rebuyIndex: 0,
+    freezeIndex: 0,
+    column: 1,
+    columnTouched: false,
+    rebuys: 0,
+    alive: 8,
+    skipFirst: false,
+    elapsed: 0,
+    runSince: 0,
+    rev: 0,
+  };
 }
-async function pullGithub() {
+function fillDerived(st) {
+  const alive = Math.max(2, Math.min(8, Number(st.alive) || 8));
+  const rebuys = Math.max(0, Number(st.rebuys) || 0);
+  st.avg = Math.round((8 * 30000 + rebuys * 30000 + alive * 40000) / alive);
+  st.suggested = st.avg <= 80000 ? 0 : st.avg <= 115000 ? 1 : st.avg <= 150000 ? 2 : 3;
+}
+function beginFreeze(st, now) {
+  suggestView(st);
+  st.phase = "freeze";
+  st.freezeIndex = st.skipFirst ? 1 : 0;
+  startView(st, LEVEL_MS, now);
+}
+function applyAction(st, kind, data) {
   const now = Date.now();
-  if (now < githubNext) return;
-  githubNext = now + 75000;
-  const res = await fetch(GH_STATE, {
-    cache: "no-store",
-    headers: { Accept: "application/vnd.github+json" },
-  });
-  const remaining = Number(res.headers.get("x-ratelimit-remaining"));
-  if (res.status === 403 || (Number.isFinite(remaining) && remaining < 12)) {
-    const reset = Number(res.headers.get("x-ratelimit-reset")) * 1000;
-    githubNext = Math.max(Date.now() + 60000, reset || 0);
-    return;
+  if (kind === "start" && st.phase === "idle") {
+    st.phase = "rebuy";
+    st.rebuyIndex = 0;
+    st.elapsed = 0;
+    startView(st, LEVEL_MS, now);
+    return true;
   }
-  if (!res.ok) return;
-  const data = await res.json();
-  if (!data.content) return;
-  const text = atob(String(data.content).replace(/\s/g, ""));
-  const state = JSON.parse(text);
-  state.admin = false;
-  applyRemote(state, false);
+  if (kind === "pause") {
+    if (!st.running) return false;
+    st.remaining = Math.max(0, st.endsAt - now);
+    st.elapsed = (st.elapsed || 0) + now - (st.runSince || now);
+    st.running = false;
+    st.runSince = 0;
+    return true;
+  }
+  if (kind === "resume") {
+    if (st.phase === "idle" || st.running) return false;
+    startView(st, Math.max(0, Number(st.remaining) || 0), now);
+    return true;
+  }
+  if (kind === "next") {
+    if (st.phase === "idle") return false;
+    if (st.phase === "break") {
+      beginFreeze(st, now);
+      return true;
+    }
+    if (st.phase === "rebuy" && st.rebuyIndex >= 7) {
+      st.phase = "break";
+      st.columnTouched = false;
+      suggestView(st);
+      startView(st, BREAK_MS, now);
+      return true;
+    }
+    if (st.phase === "rebuy") st.rebuyIndex += 1;
+    else st.freezeIndex += 1;
+    startView(st, LEVEL_MS, now);
+    return true;
+  }
+  if (kind === "prev") {
+    if (st.phase === "rebuy" && st.rebuyIndex === 0) return false;
+    if (st.phase === "rebuy") {
+      st.rebuyIndex -= 1;
+      startView(st, LEVEL_MS, now);
+      return true;
+    }
+    if (st.phase === "break") {
+      st.phase = "rebuy";
+      st.rebuyIndex = 7;
+      startView(st, LEVEL_MS, now);
+      return true;
+    }
+    if (st.freezeIndex === 0) {
+      st.phase = "break";
+      st.columnTouched = false;
+      suggestView(st);
+      startView(st, BREAK_MS, now);
+      return true;
+    }
+    st.freezeIndex -= 1;
+    startView(st, LEVEL_MS, now);
+    return true;
+  }
+  if (kind === "reset") {
+    const rev = st.rev;
+    Object.assign(st, freshState());
+    st.rev = rev;
+    return true;
+  }
+  if (kind === "rebuy") {
+    st.rebuys = Math.max(0, Number(st.rebuys) + Number(data.delta || 1));
+    if (st.phase === "break") suggestView(st);
+    return true;
+  }
+  if (kind === "alive") {
+    st.alive = Math.max(2, Math.min(8, Number(data.alive || 8)));
+    if (st.phase === "break") suggestView(st);
+    return true;
+  }
+  if (kind === "column") {
+    st.column = Math.max(0, Math.min(3, Number(data.column)));
+    st.columnTouched = true;
+    return true;
+  }
+  if (kind === "skip") {
+    st.skipFirst = !!data.skip;
+    st.columnTouched = true;
+    return true;
+  }
+  if (kind === "startFreeze" && st.phase === "break") {
+    beginFreeze(st, now);
+    return true;
+  }
+  return false;
+}
+async function saveState(st) {
+  pendingSave = st;
+  const res = await fetch(STORE, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(st),
+  });
+  if (res.ok && pendingSave === st) pendingSave = null;
 }
 async function pull() {
-  if (remote === "local") {
-    try {
-      const res = await fetch("/api/state", { cache: "no-store", credentials: "same-origin" });
-      const type = res.headers.get("content-type") || "";
-      if (res.ok && type.includes("json")) {
-        applyRemote(await res.json(), true);
-        return;
-      }
-      if (res.status === 404) remote = "github";
-      else return;
-    } catch (err) {
-      remote = "github";
-    }
+  if (pendingSave) {
+    await saveState(pendingSave);
+    return;
   }
-  await pullGithub();
+  const res = await fetch(STORE, { cache: "no-store" });
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!data || !data.phase) return;
+  if (snapshot && Number(data.rev || 0) < Number(snapshot.rev || 0)) return;
+  fillDerived(data);
+  snapshot = data;
+  paint();
 }
 async function act(type, extra) {
   if (!admin) return;
-  await fetch("/api/action", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ type: type }, extra || {})),
-  });
-  await pull();
+  const shown = displayState();
+  const next = Object.assign({}, shown || freshState());
+  if (!applyAction(next, type, extra || {})) return;
+  next.rev = Number(next.rev || 0) + 1;
+  fillDerived(next);
+  snapshot = next;
+  paint();
+  await saveState(next);
 }
 function paintColumns(st) {
   const sig = st.column + ":" + st.suggested;
@@ -677,6 +782,9 @@ function paintColumns(st) {
   });
 }
 function paint() {
+  $("authBtn").textContent = admin ? "Выйти" : "Ведущий";
+  $("startBtn").hidden = !admin;
+  $("viewerNote").hidden = admin;
   const st = displayState();
   if (!st) return;
   const mark = [st.phase, st.rebuyIndex, st.freezeIndex].join(":");
@@ -689,15 +797,11 @@ function paint() {
   const left = leftMs(st);
   $("startScreen").hidden = !idle || !$("loginScreen").hidden;
   $("breakScreen").hidden = !onBreak;
-  $("startBtn").hidden = !admin;
-  $("viewerNote").hidden = admin;
   $("controls").hidden = !admin || idle || onBreak;
   $("breakAdmin").hidden = !admin;
   $("breakText").textContent = admin
     ? "Ребаи закрыты. Отметьте, сколько ребаев ушло за стол и сколько игроков ещё в игре. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке."
     : "Ребаи закрыты. Идёт перерыв на аддон. Вылет начнёт ведущий.";
-  $("authBtn").hidden = remote === "github";
-  $("authBtn").textContent = admin ? "Выйти" : "Ведущий";
   $("clock").textContent = fmt(left);
   $("clock").classList.toggle("warn", !idle && !onBreak && left <= 60000);
   $("breakClock").textContent = fmt(left);
@@ -791,10 +895,11 @@ $("soundBtn").addEventListener("click", () => {
   $("soundBtn").textContent = soundOn ? "Звук: вкл" : "Звук: выкл";
   if (soundOn) { unlockAudio(); chime(880, 0.12); }
 });
-$("authBtn").addEventListener("click", async () => {
+$("authBtn").addEventListener("click", () => {
   if (admin) {
-    await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
-    await pull();
+    admin = false;
+    sessionStorage.removeItem("poker-host");
+    paint();
     return;
   }
   $("loginError").textContent = "";
@@ -806,22 +911,20 @@ $("loginCancel").addEventListener("click", () => {
   $("loginScreen").hidden = true;
   paint();
 });
-$("loginForm").addEventListener("submit", async (event) => {
+$("loginForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const res = await fetch("/api/login", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login: $("loginUser").value.trim(), password: $("loginPass").value }),
-  });
-  if (!res.ok) {
+  const login = $("loginUser").value.trim();
+  const password = $("loginPass").value;
+  if (login !== "admin" || password !== "123123123") {
     $("loginError").textContent = "Неверный логин или пароль";
     return;
   }
+  admin = true;
+  sessionStorage.setItem("poker-host", "1");
   $("loginPass").value = "";
   $("loginScreen").hidden = true;
   unlockAudio();
-  await pull();
+  paint();
 });
 document.addEventListener("keydown", (event) => {
   if (!admin || event.target.matches("input, textarea")) return;
@@ -834,7 +937,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 setInterval(() => { if (snapshot) paint(); }, 200);
-setInterval(() => { pull().catch(() => {}); }, 800);
+setInterval(() => { pull().catch(() => {}); }, 15000);
 pull().catch(() => {});
 </script>
 </body>
