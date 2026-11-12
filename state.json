@@ -1,0 +1,18 @@
+{
+  "phase": "idle",
+  "running": false,
+  "endsAt": 0,
+  "remaining": 900000,
+  "rebuyIndex": 0,
+  "freezeIndex": 0,
+  "column": 1,
+  "columnTouched": false,
+  "rebuys": 0,
+  "alive": 8,
+  "skipFirst": false,
+  "elapsed": 0,
+  "runSince": 0,
+  "serverNow": 0,
+  "avg": 70000,
+  "suggested": 0
+}

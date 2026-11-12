@@ -38,6 +38,9 @@
     min-height: 44px;
   }
   .top {
+    position: relative;
+    z-index: 50;
+    background: var(--bg);
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -282,6 +285,30 @@
     color: var(--paper);
   }
   .break-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .auth {
+    border: 1px solid #3a3a3d;
+    background: transparent;
+    color: var(--paper);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    margin-top: 6px;
+    background: #0c0c0d;
+    color: var(--paper);
+    border: 1px solid #3a3a3d;
+    border-radius: 4px;
+    padding: 12px;
+    font-size: 18px;
+  }
+  .login-error { color: var(--crimson); min-height: 1.2em; font-weight: 700; }
+  .controls[hidden], .admin-only[hidden] { display: none !important; }
+  .head-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+  #loginScreen { z-index: 40; }
   @media (max-width: 900px) {
     .blinds { grid-template-columns: 1fr 1fr; gap: 10px; }
     .blind.ante { grid-column: 1 / -1; }
@@ -303,9 +330,15 @@
       <div class="kicker">HOLD'EM · 8 ИГРОКОВ</div>
       <h1 id="levelTitle">Уровень 1</h1>
     </div>
-    <div class="phase open" id="phase">
-      <span id="phaseText">РЕБАЙ ОТКРЫТ</span>
-      <small id="elapsed">В игре 0:00</small>
+    <div>
+      <div class="phase" id="phase">
+        <span id="phaseText">ОЖИДАНИЕ</span>
+        <small id="elapsed">Турнир ещё не начат</small>
+      </div>
+      <div class="head-actions">
+        <button id="soundBtn" class="auth" type="button">Звук: вкл</button>
+        <button id="authBtn" class="auth" type="button">Ведущий</button>
+      </div>
     </div>
   </header>
 
@@ -320,11 +353,10 @@
     <div class="next" id="nextLine">Дальше <b>уровень 2</b> · 200 / 400</div>
   </main>
 
-  <footer class="controls">
+  <footer class="controls" id="controls" hidden>
     <button id="pauseBtn" type="button">Пауза</button>
     <button id="prevBtn" type="button">Предыдущий</button>
     <button id="nextBtn" type="button">Следующий</button>
-    <button id="soundBtn" type="button">Звук: вкл</button>
     <button id="resetBtn" type="button">Сброс</button>
     <div class="rebuy-count" id="rebuyBox">
       <span>Ребаев</span>
@@ -343,9 +375,10 @@
         <li>Старт — 30 000 фишек, блайнды 100 / 200</li>
         <li>Ребай — 30 000, пока стек не больше 30 000</li>
         <li>Аддон — 40 000 один раз, в 2:00</li>
-        <li>Пробел ставит часы на паузу</li>
+        <li>У игроков только просмотр. Старт и пауза у ведущего</li>
       </ul>
-      <button class="primary" id="startBtn" type="button">Начать турнир</button>
+      <p id="viewerNote">Часы запустит ведущий. На этом экране видно текущий уровень и обратный отсчёт.</p>
+      <button class="primary" id="startBtn" type="button" hidden>Начать турнир</button>
     </div>
   </section>
 
@@ -354,36 +387,57 @@
       <div class="kicker">ПЕРЕРЫВ</div>
       <div class="clock" id="breakClock">10:00</div>
       <h2>Аддон</h2>
-      <p>Ребаи закрыты. Отметьте, сколько ребаев ушло за стол и сколько игроков ещё в игре. Часы сами предложат колонку. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке.</p>
-      <div class="fields">
-        <label>Ребаев за столом
-          <input id="rebuyInput" type="number" min="0" step="1" value="0">
+      <p id="breakText">Ребаи закрыты. Идёт десятиминутный перерыв.</p>
+      <div class="admin-only" id="breakAdmin">
+        <div class="fields">
+          <label>Ребаев за столом
+            <input id="rebuyInput" type="number" min="0" step="1" value="0">
+          </label>
+          <label>Игроков осталось
+            <input id="aliveInput" type="number" min="2" max="8" step="1" value="8">
+          </label>
+        </div>
+        <div class="avg" id="avgOut">Средний стек <b>—</b></div>
+        <div class="cols" id="colButtons"></div>
+        <label class="check">
+          <input id="skipFirst" type="checkbox">
+          Средний стек выше 200 000 — начать вылет с уровня 10
         </label>
-        <label>Игроков осталось
-          <input id="aliveInput" type="number" min="2" max="8" step="1" value="8">
-        </label>
+        <div class="break-actions">
+          <button class="primary" id="startFreeze" type="button">Начать вылет</button>
+          <button class="ghost" id="breakPause" type="button">Пауза</button>
+        </div>
       </div>
-      <div class="avg" id="avgOut">Средний стек <b>—</b></div>
-      <div class="cols" id="colButtons"></div>
-      <label class="check">
-        <input id="skipFirst" type="checkbox">
-        Средний стек выше 200 000 — начать вылет с уровня 10
-      </label>
-      <div class="break-actions">
-        <button class="primary" id="startFreeze" type="button">Начать вылет</button>
-        <button class="ghost" id="breakPause" type="button">Пауза</button>
-      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="loginScreen" hidden>
+    <div class="panel">
+      <div class="kicker">ВЕДУЩИЙ</div>
+      <h2>Вход</h2>
+      <p>Игрокам вход не нужен. После входа на этом телефоне появятся старт, пауза и смена уровня.</p>
+      <form id="loginForm">
+        <div class="fields">
+          <label>Логин
+            <input id="loginUser" type="text" autocomplete="username" inputmode="text">
+          </label>
+          <label>Пароль
+            <input id="loginPass" type="password" autocomplete="current-password">
+          </label>
+        </div>
+        <p class="login-error" id="loginError"></p>
+        <div class="break-actions">
+          <button class="primary" type="submit">Войти</button>
+          <button class="ghost" id="loginCancel" type="button">Закрыть</button>
+        </div>
+      </form>
     </div>
   </section>
 
 <script>
 const LEVEL_MS = 15 * 60 * 1000;
 const BREAK_MS = 10 * 60 * 1000;
-const START_PLAYERS = 8;
-const START_STACK = 30000;
-const REBUY_STACK = 30000;
-const ADDON_STACK = 40000;
-
+const GH_STATE = "https://api.github.com/repos/belenikinv-afk/poker-clock/contents/state.json";
 const REBUY = [
   [100, 200, 0],
   [200, 400, 0],
@@ -394,302 +448,140 @@ const REBUY = [
   [1000, 2000, 0],
   [1500, 3000, 0],
 ];
-
 const COLUMNS = [
-  {
-    id: "low",
-    name: "до 80 000",
-    hint: "0–2 ребая",
-    blinds: [
-      [1000, 2000, 2000],
-      [1000, 2000, 2000],
-      [1600, 3000, 3000],
-      [2000, 4000, 4000],
-      [3000, 6000, 6000],
-      [5000, 10000, 10000],
-      [8000, 16000, 16000],
-      [12000, 24000, 24000],
-    ],
-  },
-  {
-    id: "mid",
-    name: "80–115 000",
-    hint: "3–12 ребаев",
-    blinds: [
-      [1000, 3000, 3000],
-      [1600, 3000, 3000],
-      [2000, 4000, 4000],
-      [3000, 6000, 6000],
-      [4000, 8000, 8000],
-      [6000, 12000, 12000],
-      [10000, 20000, 20000],
-      [16000, 30000, 30000],
-    ],
-  },
-  {
-    id: "high",
-    name: "115–150 000",
-    hint: "13–21 ребай",
-    blinds: [
-      [2000, 4000, 4000],
-      [2500, 5000, 5000],
-      [3000, 6000, 6000],
-      [4000, 8000, 8000],
-      [6000, 12000, 12000],
-      [10000, 20000, 20000],
-      [15000, 30000, 30000],
-      [25000, 50000, 50000],
-    ],
-  },
-  {
-    id: "huge",
-    name: "от 150 000",
-    hint: "22 ребая и больше",
-    blinds: [
-      [2500, 5000, 5000],
-      [2500, 5000, 5000],
-      [4000, 8000, 8000],
-      [5000, 10000, 10000],
-      [8000, 16000, 16000],
-      [12000, 24000, 24000],
-      [20000, 40000, 40000],
-      [30000, 60000, 60000],
-    ],
-  },
+  { name: "до 80 000", hint: "0–2 ребая", blinds: [[1000,2000,2000],[1000,2000,2000],[1600,3000,3000],[2000,4000,4000],[3000,6000,6000],[5000,10000,10000],[8000,16000,16000],[12000,24000,24000]] },
+  { name: "80–115 000", hint: "3–12 ребаев", blinds: [[1000,3000,3000],[1600,3000,3000],[2000,4000,4000],[3000,6000,6000],[4000,8000,8000],[6000,12000,12000],[10000,20000,20000],[16000,30000,30000]] },
+  { name: "115–150 000", hint: "13–21 ребай", blinds: [[2000,4000,4000],[2500,5000,5000],[3000,6000,6000],[4000,8000,8000],[6000,12000,12000],[10000,20000,20000],[15000,30000,30000],[25000,50000,50000]] },
+  { name: "от 150 000", hint: "22 ребая и больше", blinds: [[2500,5000,5000],[2500,5000,5000],[4000,8000,8000],[5000,10000,10000],[8000,16000,16000],[12000,24000,24000],[20000,40000,40000],[30000,60000,60000]] },
 ];
 
 const $ = (id) => document.getElementById(id);
-
-let phase = "idle";
-let running = false;
-let endsAt = 0;
-let remaining = LEVEL_MS;
-let rebuyIndex = 0;
-let freezeIndex = 0;
-let column = 1;
-let columnTouched = false;
-let rebuys = 0;
-let elapsed = 0;
-let runSince = 0;
+let snapshot = null;
+let colSig = "";
+let remote = "local";
+let githubNext = 0;
+let offset = 0;
+let admin = false;
 let soundOn = true;
 let audioCtx = null;
+let lastMark = "";
+let seen = false;
 let warned = false;
 
+function money(n) {
+  return Number(n).toLocaleString("ru-RU");
+}
 function fmt(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
-function fmtLong(ms) {
-  const s = Math.floor(ms / 1000);
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const r = s % 60;
-  if (h > 0) return h + ":" + String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+  if (h) return h + ":" + String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
   return m + ":" + String(r).padStart(2, "0");
 }
-function chips(n) {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+function bump(bb) {
+  const raw = bb * 1.5;
+  const step = bb >= 20000 ? 5000 : bb >= 8000 ? 1000 : bb >= 2000 ? 500 : 100;
+  const nextBb = Math.max(bb + step, Math.round(raw / step) * step);
+  return [nextBb / 2, nextBb, nextBb];
 }
-function roundBlind(n) {
-  const step = n >= 50000 ? 5000 : n >= 10000 ? 1000 : n >= 2000 ? 500 : 100;
-  return Math.max(step, Math.round(n / step) * step);
+function rowAt(index, column) {
+  const blinds = COLUMNS[column].blinds;
+  if (index < blinds.length) return blinds[index];
+  let row = blinds[blinds.length - 1];
+  for (let i = blinds.length; i <= index; i++) row = bump(row[1]);
+  return row;
 }
-function blindAt(list, index) {
-  if (index < list.length) return list[index];
-  let last = list[list.length - 1];
-  for (let i = list.length; i <= index; i++) {
-    const bb = roundBlind(last[1] * 1.5);
-    const sb = roundBlind(bb / 2);
-    last = [sb, bb, last[2] ? bb : 0];
+function nextInfo(st) {
+  if (st.phase === "rebuy") {
+    if (st.rebuyIndex < 7) {
+      const row = REBUY[st.rebuyIndex + 1];
+      return "Дальше <b>уровень " + (st.rebuyIndex + 2) + "</b> · " + money(row[0]) + " / " + money(row[1]);
+    }
+    return "Дальше <b>перерыв 10:00</b> · аддон";
   }
-  return last;
-}
-function currentBlind() {
-  if (phase === "break") return null;
-  if (phase === "freeze") return blindAt(COLUMNS[column].blinds, freezeIndex);
-  return blindAt(REBUY, rebuyIndex);
-}
-function nextBlind() {
-  if (phase === "idle" || phase === "rebuy") {
-    if (rebuyIndex < REBUY.length - 1) return { label: "уровень " + (rebuyIndex + 2), blind: REBUY[rebuyIndex + 1] };
-    return { label: "перерыв и аддон", blind: null };
+  if (st.phase === "break") {
+    const idx = st.skipFirst ? 1 : 0;
+    const row = rowAt(idx, st.column);
+    return "Дальше <b>уровень " + (9 + idx) + "</b> · " + money(row[0]) + " / " + money(row[1]);
   }
-  if (phase === "break") {
-    const idx = $("skipFirst").checked ? 1 : 0;
-    return { label: "уровень " + (9 + idx), blind: COLUMNS[column].blinds[idx] };
-  }
-  const idx = freezeIndex + 1;
-  return { label: "уровень " + (9 + idx), blind: blindAt(COLUMNS[column].blinds, idx) };
+  const row = rowAt(st.freezeIndex + 1, st.column);
+  return "Дальше <b>уровень " + (10 + st.freezeIndex) + "</b> · " + money(row[0]) + " / " + money(row[1]);
 }
-function leftMs() {
-  if (!running) return remaining;
-  return Math.max(0, endsAt - Date.now());
+function suggestView(copy) {
+  if (copy.columnTouched) return;
+  const alive = Math.max(2, Math.min(8, Number(copy.alive) || 8));
+  const rebuys = Math.max(0, Number(copy.rebuys) || 0);
+  const avg = Math.round((8 * 30000 + rebuys * 30000 + alive * 40000) / alive);
+  copy.avg = avg;
+  copy.suggested = avg <= 80000 ? 0 : avg <= 115000 ? 1 : avg <= 150000 ? 2 : 3;
+  copy.column = copy.suggested;
+  copy.skipFirst = avg > 200000;
 }
-function elapsedNow() {
-  return elapsed + (running ? Date.now() - runSince : 0);
+function startView(copy, duration, now) {
+  if (copy.running && copy.runSince) copy.elapsed = (copy.elapsed || 0) + now - copy.runSince;
+  copy.remaining = duration;
+  copy.endsAt = now + duration;
+  copy.running = true;
+  copy.runSince = now;
 }
-
-function render() {
-  const left = leftMs();
-  $("clock").textContent = fmt(left);
-  $("breakClock").textContent = fmt(left);
-  $("clock").classList.toggle("warn", running && left <= 60000 && phase !== "idle");
-  $("breakClock").classList.toggle("warn", running && left <= 60000 && phase === "break");
-  $("pausedFlag").textContent = phase !== "idle" && !running ? "ПАУЗА" : "";
-  $("elapsed").textContent = "В игре " + fmtLong(elapsedNow());
-  $("pauseBtn").textContent = running ? "Пауза" : "Продолжить";
-  $("pauseBtn").classList.toggle("is-paused", !running && phase !== "idle");
-  $("breakPause").textContent = running ? "Пауза" : "Продолжить";
-
-  const blind = currentBlind();
-  if (blind) {
-    $("sb").textContent = chips(blind[0]);
-    $("bb").textContent = chips(blind[1]);
-    $("ante").textContent = blind[2] ? chips(blind[2]) : "—";
-  }
-
-  if (phase === "idle" || phase === "rebuy") {
-    $("levelTitle").textContent = "Уровень " + (rebuyIndex + 1);
-    $("phase").className = "phase open";
-    $("phaseText").textContent = "РЕБАЙ ОТКРЫТ";
-  } else if (phase === "break") {
-    $("levelTitle").textContent = "Перерыв";
-    $("phase").className = "phase closed";
-    $("phaseText").textContent = "РЕБАИ ЗАКРЫТЫ";
-    $("sb").textContent = "—";
-    $("bb").textContent = "—";
-    $("ante").textContent = "—";
-  } else {
-    $("levelTitle").textContent = "Уровень " + (9 + freezeIndex);
-    $("phase").className = "phase closed";
-    $("phaseText").textContent = "ИГРА НА ВЫЛЕТ · " + COLUMNS[column].name;
-  }
-
-  const nxt = nextBlind();
-  if (!nxt.blind) {
-    $("nextLine").innerHTML = "Дальше <b>" + nxt.label + "</b>";
-  } else {
-    const ante = nxt.blind[2] ? " · анте " + chips(nxt.blind[2]) : "";
-    $("nextLine").innerHTML = "Дальше <b>" + nxt.label + "</b> · " + chips(nxt.blind[0]) + " / " + chips(nxt.blind[1]) + ante;
-  }
-  $("rebuyBox").style.visibility = phase === "freeze" ? "hidden" : "visible";
-  $("rebuyNum").textContent = String(rebuys);
-  document.title = fmt(left) + " · " + ($("bb").textContent === "—" ? "перерыв" : $("sb").textContent + "/" + $("bb").textContent);
-
-  if (running && left <= 10000 && !warned && soundOn) {
-    warned = true;
-    chime(660, 0.12);
-  }
-  if (left > 10000) warned = false;
-}
-
-function startRun(ms) {
-  if (running && runSince) elapsed += Date.now() - runSince;
-  remaining = ms;
-  endsAt = Date.now() + ms;
-  running = true;
-  runSince = Date.now();
-  warned = false;
-}
-function pause() {
-  if (phase === "idle" || !running) return;
-  remaining = leftMs();
-  elapsed += Date.now() - runSince;
-  running = false;
-  render();
-}
-function resume() {
-  if (phase === "idle" || running) return;
-  startRun(remaining);
-  render();
-}
-function togglePause() {
-  if (phase === "idle") return;
-  if (running) pause();
-  else resume();
-}
-
-function playLevel(which) {
-  phase = which;
-  $("breakScreen").hidden = which !== "break";
-  $("startScreen").hidden = true;
-  startRun(which === "break" ? BREAK_MS : LEVEL_MS);
-  if (which === "break") {
-    columnTouched = false;
-    $("rebuyInput").value = String(rebuys);
-    refreshAverage();
-  }
-  render();
-}
-
-function advance() {
-  chime(880, 0.18);
-  setTimeout(() => chime(1175, 0.22), 160);
-  if (phase === "rebuy") {
-    if (rebuyIndex < REBUY.length - 1) {
-      rebuyIndex += 1;
-      playLevel("rebuy");
+function advanceView(copy, now) {
+  if (copy.phase === "rebuy") {
+    if (copy.rebuyIndex < 7) {
+      copy.rebuyIndex += 1;
+      startView(copy, LEVEL_MS, now);
     } else {
-      playLevel("break");
+      copy.phase = "break";
+      copy.columnTouched = false;
+      suggestView(copy);
+      startView(copy, BREAK_MS, now);
     }
     return;
   }
-  if (phase === "break") {
-    beginFreeze();
+  if (copy.phase === "break") {
+    suggestView(copy);
+    copy.phase = "freeze";
+    copy.freezeIndex = copy.skipFirst ? 1 : 0;
+    startView(copy, LEVEL_MS, now);
     return;
   }
-  freezeIndex += 1;
-  playLevel("freeze");
-}
-
-function beginFreeze() {
-  column = selectedColumn();
-  freezeIndex = $("skipFirst").checked ? 1 : 0;
-  playLevel("freeze");
-}
-
-function goPrev() {
-  if (phase === "idle") return;
-  if (phase === "rebuy" && rebuyIndex === 0) return;
-  if (phase === "rebuy") rebuyIndex -= 1;
-  else if (phase === "break") {
-    rebuyIndex = REBUY.length - 1;
-    playLevel("rebuy");
-    return;
-  } else if (freezeIndex === 0) {
-    playLevel("break");
-    return;
-  } else freezeIndex -= 1;
-  playLevel(phase);
-}
-
-function goNext() {
-  if (phase === "idle") return;
-  if (phase === "break") {
-    beginFreeze();
-    return;
+  if (copy.phase === "freeze") {
+    copy.freezeIndex += 1;
+    startView(copy, LEVEL_MS, now);
   }
-  if (phase === "rebuy" && rebuyIndex >= REBUY.length - 1) {
-    playLevel("break");
-    return;
-  }
-  if (phase === "rebuy") rebuyIndex += 1;
-  else freezeIndex += 1;
-  playLevel(phase);
 }
-
-function tick() {
-  if (running && Date.now() >= endsAt) {
-    let guard = 0;
-    while (running && Date.now() >= endsAt && guard++ < 12) advance();
+function displayState() {
+  if (!snapshot) return null;
+  if (remote !== "github" || !snapshot.running) return snapshot;
+  const copy = Object.assign({}, snapshot);
+  let guard = 0;
+  let now = Date.now();
+  while (copy.running && now >= copy.endsAt && guard++ < 24) {
+    advanceView(copy, now);
+    now = Date.now();
   }
-  render();
+  return copy;
 }
-
+function serverNow() { return Date.now() + offset; }
+function leftMs(st) {
+  if (!st || st.phase === "idle") return LEVEL_MS;
+  if (st.running) return Math.max(0, st.endsAt - serverNow());
+  return st.remaining;
+}
+function playedMs(st) {
+  if (!st || st.phase === "idle") return 0;
+  let elapsed = st.elapsed || 0;
+  if (st.running && st.runSince) elapsed += serverNow() - st.runSince;
+  return Math.max(0, elapsed);
+}
 function unlockAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  if (!audioCtx) audioCtx = new Ctx();
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 function chime(freq, dur) {
@@ -707,73 +599,164 @@ function chime(freq, dur) {
   o.start(t);
   o.stop(t + dur + 0.02);
 }
+function levelChime() {
+  unlockAudio();
+  chime(660, 0.12);
+  setTimeout(() => chime(880, 0.18), 140);
+}
 
-function averageStack() {
-  const alive = Math.max(2, Math.min(8, Number($("aliveInput").value) || START_PLAYERS));
-  const r = Math.max(0, Number($("rebuyInput").value) || 0);
-  const total = START_PLAYERS * START_STACK + r * REBUY_STACK + alive * ADDON_STACK;
-  return { alive, rebuys: r, avg: Math.round(total / alive) };
+function applyRemote(data, fromServer) {
+  offset = fromServer ? data.serverNow - Date.now() : 0;
+  snapshot = data;
+  admin = fromServer && !!data.admin;
+  paint();
 }
-function columnFor(avg) {
-  if (avg <= 80000) return 0;
-  if (avg <= 115000) return 1;
-  if (avg <= 150000) return 2;
-  return 3;
-}
-function selectedColumn() {
-  const picked = document.querySelector(".cols button.picked");
-  if (picked) return Number(picked.dataset.index);
-  return columnFor(averageStack().avg);
-}
-function refreshAverage() {
-  const { avg } = averageStack();
-  $("avgOut").innerHTML = "Средний стек <b>" + chips(avg) + "</b>";
-  const suggested = columnFor(avg);
-  document.querySelectorAll(".cols button").forEach((btn) => {
-    btn.classList.toggle("suggested", Number(btn.dataset.index) === suggested);
+async function pullGithub() {
+  const now = Date.now();
+  if (now < githubNext) return;
+  githubNext = now + 75000;
+  const res = await fetch(GH_STATE, {
+    cache: "no-store",
+    headers: { Accept: "application/vnd.github+json" },
   });
-  $("skipFirst").checked = avg > 200000;
-  if (!columnTouched) {
-    document.querySelectorAll(".cols button").forEach((btn) => {
-      btn.classList.toggle("picked", Number(btn.dataset.index) === suggested);
-    });
-    column = suggested;
+  const remaining = Number(res.headers.get("x-ratelimit-remaining"));
+  if (res.status === 403 || (Number.isFinite(remaining) && remaining < 12)) {
+    const reset = Number(res.headers.get("x-ratelimit-reset")) * 1000;
+    githubNext = Math.max(Date.now() + 60000, reset || 0);
+    return;
+  }
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!data.content) return;
+  const text = atob(String(data.content).replace(/\s/g, ""));
+  const state = JSON.parse(text);
+  state.admin = false;
+  applyRemote(state, false);
+}
+async function pull() {
+  if (remote === "local") {
+    try {
+      const res = await fetch("/api/state", { cache: "no-store", credentials: "same-origin" });
+      const type = res.headers.get("content-type") || "";
+      if (res.ok && type.includes("json")) {
+        applyRemote(await res.json(), true);
+        return;
+      }
+      if (res.status === 404) remote = "github";
+      else return;
+    } catch (err) {
+      remote = "github";
+    }
+  }
+  await pullGithub();
+}
+async function act(type, extra) {
+  if (!admin) return;
+  await fetch("/api/action", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({ type: type }, extra || {})),
+  });
+  await pull();
+}
+function paintColumns(st) {
+  const sig = st.column + ":" + st.suggested;
+  const box = $("colButtons");
+  if (sig === colSig && box.children.length) return;
+  colSig = sig;
+  box.innerHTML = "";
+  COLUMNS.forEach((col, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.innerHTML = col.name + "<small>" + col.hint + "</small>";
+    if (i === st.suggested) btn.classList.add("suggested");
+    if (i === st.column) btn.classList.add("picked");
+    btn.addEventListener("click", () => act("column", { column: i }));
+    box.appendChild(btn);
+  });
+}
+function paint() {
+  const st = displayState();
+  if (!st) return;
+  const mark = [st.phase, st.rebuyIndex, st.freezeIndex].join(":");
+  if (seen && mark !== lastMark && st.phase !== "idle") levelChime();
+  if (mark !== lastMark) warned = false;
+  lastMark = mark;
+  seen = true;
+  const idle = st.phase === "idle";
+  const onBreak = st.phase === "break";
+  const left = leftMs(st);
+  $("startScreen").hidden = !idle || !$("loginScreen").hidden;
+  $("breakScreen").hidden = !onBreak;
+  $("startBtn").hidden = !admin;
+  $("viewerNote").hidden = admin;
+  $("controls").hidden = !admin || idle || onBreak;
+  $("breakAdmin").hidden = !admin;
+  $("breakText").textContent = admin
+    ? "Ребаи закрыты. Отметьте, сколько ребаев ушло за стол и сколько игроков ещё в игре. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке."
+    : "Ребаи закрыты. Идёт перерыв на аддон. Вылет начнёт ведущий.";
+  $("authBtn").hidden = remote === "github";
+  $("authBtn").textContent = admin ? "Выйти" : "Ведущий";
+  $("clock").textContent = fmt(left);
+  $("clock").classList.toggle("warn", !idle && !onBreak && left <= 60000);
+  $("breakClock").textContent = fmt(left);
+  $("pausedFlag").textContent = !idle && !onBreak && !st.running ? "ПАУЗА" : "";
+  $("pauseBtn").textContent = st.running ? "Пауза" : "Продолжить";
+  $("pauseBtn").classList.toggle("is-paused", !idle && !st.running);
+  if ($("breakPause")) {
+    $("breakPause").textContent = st.running ? "Пауза" : "Продолжить";
+  }
+  $("elapsed").textContent = idle ? "Турнир ещё не начат" : "В игре " + fmtElapsed(playedMs(st));
+  $("rebuyNum").textContent = String(st.rebuys);
+  if (document.activeElement !== $("rebuyInput")) $("rebuyInput").value = st.rebuys;
+  if (document.activeElement !== $("aliveInput")) $("aliveInput").value = st.alive;
+  $("avgOut").innerHTML = "Средний стек <b>" + money(st.avg) + "</b>";
+  if (document.activeElement !== $("skipFirst")) $("skipFirst").checked = !!st.skipFirst;
+
+  const phase = $("phase");
+  if (idle) {
+    phase.className = "phase";
+    $("phaseText").textContent = admin ? "ГОТОВО К СТАРТУ" : "ОЖИДАНИЕ";
+    $("levelTitle").textContent = "Уровень 1";
+    $("sb").textContent = "100";
+    $("bb").textContent = "200";
+    $("ante").textContent = "—";
+    $("nextLine").innerHTML = "Дальше <b>уровень 2</b> · 200 / 400";
+  } else if (st.phase === "rebuy") {
+    phase.className = "phase open";
+    $("phaseText").textContent = "РЕБАЙ ОТКРЫТ";
+    const row = REBUY[st.rebuyIndex];
+    $("levelTitle").textContent = "Уровень " + (st.rebuyIndex + 1);
+    $("sb").textContent = money(row[0]);
+    $("bb").textContent = money(row[1]);
+    $("ante").textContent = "—";
+    $("nextLine").innerHTML = nextInfo(st);
+  } else if (onBreak) {
+    phase.className = "phase";
+    $("phaseText").textContent = "ПЕРЕРЫВ · АДДОН";
+    $("levelTitle").textContent = "Перерыв";
+    $("sb").textContent = money(REBUY[7][0]);
+    $("bb").textContent = money(REBUY[7][1]);
+    $("ante").textContent = "—";
+    $("nextLine").innerHTML = nextInfo(st);
+    paintColumns(st);
+  } else {
+    phase.className = "phase closed";
+    const col = COLUMNS[st.column] || COLUMNS[1];
+    $("phaseText").textContent = "ИГРА НА ВЫЛЕТ · " + col.name;
+    const row = rowAt(st.freezeIndex, st.column);
+    $("levelTitle").textContent = "Уровень " + (9 + st.freezeIndex);
+    $("sb").textContent = money(row[0]);
+    $("bb").textContent = money(row[1]);
+    $("ante").textContent = money(row[2]);
+    $("nextLine").innerHTML = nextInfo(st);
+  }
+  if (!idle && !onBreak && st.running && left <= 10000 && !warned) {
+    warned = true;
+    chime(520, 0.08);
   }
 }
-
-function resetAll() {
-  if (phase !== "idle" && !confirm("Сбросить турнир и вернуть часы на уровень 1?")) return;
-  phase = "idle";
-  running = false;
-  remaining = LEVEL_MS;
-  rebuyIndex = 0;
-  freezeIndex = 0;
-  column = 1;
-  rebuys = 0;
-  columnTouched = false;
-  elapsed = 0;
-  $("startScreen").hidden = false;
-  $("breakScreen").hidden = true;
-  $("rebuyInput").value = "0";
-  $("aliveInput").value = "8";
-  document.querySelectorAll(".cols button").forEach((b) => b.classList.remove("picked"));
-  render();
-}
-
-COLUMNS.forEach((col, i) => {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.dataset.index = String(i);
-  btn.innerHTML = col.name + "<small>" + col.hint + "</small>";
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".cols button").forEach((b) => b.classList.remove("picked"));
-    btn.classList.add("picked");
-    columnTouched = true;
-    column = i;
-    render();
-  });
-  $("colButtons").appendChild(btn);
-});
 
 let startLock = 0;
 function onStart(event) {
@@ -782,37 +765,77 @@ function onStart(event) {
   startLock = now;
   if (event) event.preventDefault();
   unlockAudio();
-  elapsed = 0;
-  rebuyIndex = 0;
-  playLevel("rebuy");
+  act("start");
 }
 $("startBtn").addEventListener("pointerup", onStart);
 $("startBtn").addEventListener("click", onStart);
-$("pauseBtn").addEventListener("click", () => { unlockAudio(); togglePause(); });
-$("breakPause").addEventListener("click", () => { unlockAudio(); togglePause(); });
-$("prevBtn").addEventListener("click", goPrev);
-$("nextBtn").addEventListener("click", goNext);
+$("pauseBtn").addEventListener("click", () => { unlockAudio(); act(snapshot && snapshot.running ? "pause" : "resume"); });
+$("breakPause").addEventListener("click", () => { unlockAudio(); act(snapshot && snapshot.running ? "pause" : "resume"); });
+$("prevBtn").addEventListener("click", () => act("prev"));
+$("nextBtn").addEventListener("click", () => act("next"));
+$("resetBtn").addEventListener("click", () => {
+  if (confirm("Сбросить турнир и вернуть часы на уровень 1?")) act("reset");
+});
+$("rebuyPlus").addEventListener("click", () => act("rebuy", { delta: 1 }));
+$("rebuyMinus").addEventListener("click", () => act("rebuy", { delta: -1 }));
+$("rebuyInput").addEventListener("change", () => {
+  if (!snapshot) return;
+  const next = Math.max(0, Number($("rebuyInput").value) || 0);
+  act("rebuy", { delta: next - snapshot.rebuys });
+});
+$("aliveInput").addEventListener("change", () => act("alive", { alive: Number($("aliveInput").value) || 8 }));
+$("skipFirst").addEventListener("change", () => act("skip", { skip: $("skipFirst").checked }));
+$("startFreeze").addEventListener("click", () => { unlockAudio(); act("startFreeze"); });
 $("soundBtn").addEventListener("click", () => {
   soundOn = !soundOn;
   $("soundBtn").textContent = soundOn ? "Звук: вкл" : "Звук: выкл";
   if (soundOn) { unlockAudio(); chime(880, 0.12); }
 });
-$("resetBtn").addEventListener("click", resetAll);
-$("rebuyPlus").addEventListener("click", () => { rebuys += 1; $("rebuyInput").value = String(rebuys); render(); });
-$("rebuyMinus").addEventListener("click", () => { rebuys = Math.max(0, rebuys - 1); $("rebuyInput").value = String(rebuys); render(); });
-$("rebuyInput").addEventListener("input", () => { rebuys = Math.max(0, Number($("rebuyInput").value) || 0); refreshAverage(); render(); });
-$("aliveInput").addEventListener("input", refreshAverage);
-$("startFreeze").addEventListener("click", () => { unlockAudio(); beginFreeze(); });
-
-document.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, textarea")) return;
-  if (e.code === "Space") { e.preventDefault(); unlockAudio(); togglePause(); }
-  else if (e.key === "ArrowRight") goNext();
-  else if (e.key === "ArrowLeft") goPrev();
+$("authBtn").addEventListener("click", async () => {
+  if (admin) {
+    await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+    await pull();
+    return;
+  }
+  $("loginError").textContent = "";
+  $("loginScreen").hidden = false;
+  $("startScreen").hidden = true;
+  $("loginUser").focus();
+});
+$("loginCancel").addEventListener("click", () => {
+  $("loginScreen").hidden = true;
+  paint();
+});
+$("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const res = await fetch("/api/login", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: $("loginUser").value.trim(), password: $("loginPass").value }),
+  });
+  if (!res.ok) {
+    $("loginError").textContent = "Неверный логин или пароль";
+    return;
+  }
+  $("loginPass").value = "";
+  $("loginScreen").hidden = true;
+  unlockAudio();
+  await pull();
+});
+document.addEventListener("keydown", (event) => {
+  if (!admin || event.target.matches("input, textarea")) return;
+  if (event.code === "Space") {
+    event.preventDefault();
+    unlockAudio();
+    act(snapshot && snapshot.running ? "pause" : "resume");
+  } else if (event.key === "ArrowRight") act("next");
+  else if (event.key === "ArrowLeft") act("prev");
 });
 
-setInterval(tick, 200);
-render();
+setInterval(() => { if (snapshot) paint(); }, 200);
+setInterval(() => { pull().catch(() => {}); }, 800);
+pull().catch(() => {});
 </script>
 </body>
 </html>
