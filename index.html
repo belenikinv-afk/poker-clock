@@ -586,11 +586,12 @@ function suggestView(copy) {
   copy.skipFirst = copy.avg > 200000;
 }
 function startView(copy, duration, now) {
-  if (copy.running && copy.runSince) copy.elapsed = (copy.elapsed || 0) + now - copy.runSince;
+  const at = Number(now);
+  if (copy.running && copy.runSince) copy.elapsed = (copy.elapsed || 0) + at - Number(copy.runSince);
   copy.remaining = duration;
-  copy.endsAt = now + duration;
+  copy.endsAt = at + duration;
   copy.running = true;
-  copy.runSince = now;
+  copy.runSince = at;
 }
 function advanceView(copy, now) {
   if (copy.phase === "rebuy") {
@@ -622,23 +623,28 @@ function displayState() {
   if (!snapshot.running) return snapshot;
   const copy = Object.assign({}, snapshot);
   let guard = 0;
-  let now = Date.now();
-  while (copy.running && now >= copy.endsAt && guard++ < 24) {
-    advanceView(copy, now);
-    now = Date.now();
+  const now = Date.now();
+  while (copy.running && now >= Number(copy.endsAt) && guard++ < 40) {
+    advanceView(copy, Number(copy.endsAt));
   }
   return copy;
+}
+function levelMoved(shown) {
+  return shown.phase !== snapshot.phase
+    || shown.rebuyIndex !== snapshot.rebuyIndex
+    || shown.freezeIndex !== snapshot.freezeIndex
+    || Number(shown.endsAt) !== Number(snapshot.endsAt);
 }
 function serverNow() { return Date.now() + offset; }
 function leftMs(st) {
   if (!st || st.phase === "idle") return LEVEL_MS;
-  if (st.running) return Math.max(0, st.endsAt - serverNow());
+  if (st.running) return Math.max(0, Number(st.endsAt) - serverNow());
   return st.remaining;
 }
 function playedMs(st) {
   if (!st || st.phase === "idle") return 0;
   let elapsed = st.elapsed || 0;
-  if (st.running && st.runSince) elapsed += serverNow() - st.runSince;
+  if (st.running && st.runSince) elapsed += serverNow() - Number(st.runSince);
   return Math.max(0, elapsed);
 }
 function unlockAudio() {
@@ -865,6 +871,12 @@ function paint() {
   $("viewerNote").hidden = admin;
   const st = displayState();
   if (!st) return;
+  if (admin && snapshot.running && levelMoved(st)) {
+    st.rev = Number(snapshot.rev || 0) + 1;
+    fillDerived(st);
+    snapshot = st;
+    saveState(st);
+  }
   const mark = [st.phase, st.rebuyIndex, st.freezeIndex].join(":");
   if (seen && mark !== lastMark && st.phase !== "idle") levelChime();
   if (mark !== lastMark) warned = false;
@@ -1032,6 +1044,10 @@ document.addEventListener("keydown", (event) => {
 
 setInterval(() => { if (snapshot) paint(); }, 200);
 setInterval(() => { pull().catch(() => {}); }, 15000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && snapshot) paint();
+});
+window.addEventListener("pageshow", () => { if (snapshot) paint(); });
 pull().catch(() => {});
 </script>
 </body>
