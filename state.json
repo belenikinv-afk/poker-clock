@@ -1,7 +1,7 @@
 {
-  "phase": "idle",
-  "running": false,
-  "endsAt": 0,
+  "phase": "rebuy",
+  "running": true,
+  "endsAt": 1794470216809,
   "remaining": 900000,
   "rebuyIndex": 0,
   "freezeIndex": 0,
@@ -11,8 +11,8 @@
   "alive": 8,
   "skipFirst": false,
   "elapsed": 0,
-  "runSince": 0,
-  "serverNow": 0,
+  "runSince": 1794469316809,
+  "serverNow": 1794469316809,
   "avg": 70000,
   "suggested": 0
 }
