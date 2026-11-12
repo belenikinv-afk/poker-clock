@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Техасский холдем — часы</title>
+<style>
+  :root {
+    --bg: #0c0c0d;
+    --paper: #f3efe6;
+    --muted: #9a948a;
+    --line: #2a2a2c;
+    --crimson: #c4313f;
+    --crimson-deep: #8e1b2c;
+    --ok: #d7c39a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--paper);
+    font-family: Arial, Helvetica, sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  button, input { font-family: inherit; }
+  button, .primary, .ghost {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 44px;
+  }
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    padding: max(14px, env(safe-area-inset-top)) 28px 14px;
+    border-bottom: 3px solid var(--crimson);
+  }
+  .kicker {
+    color: var(--crimson);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+  }
+  h1 {
+    margin: 4px 0 0;
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .phase {
+    text-align: right;
+    font-weight: 700;
+    font-size: clamp(14px, 2vw, 20px);
+  }
+  .phase small {
+    display: block;
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .phase.open { color: var(--ok); }
+  .phase.closed { color: var(--crimson); }
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 24px 8px;
+    min-height: 0;
+  }
+  .clock {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: clamp(84px, 20vw, 240px);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+  }
+  .clock.warn { color: var(--crimson); }
+  .paused-flag {
+    height: 28px;
+    margin-top: 6px;
+    color: var(--crimson);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    font-size: 18px;
+  }
+  .blinds {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr 1fr;
+    gap: 18px;
+    width: min(980px, 100%);
+    margin-top: 18px;
+  }
+  .blind {
+    background: #141416;
+    border-top: 2px solid #3a3a3d;
+    padding: 14px 12px 16px;
+    text-align: center;
+  }
+  .blind.ante { border-top-color: var(--crimson); }
+  .blind span {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+  }
+  .blind strong {
+    display: block;
+    margin-top: 6px;
+    font-size: clamp(32px, 5vw, 64px);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+  .blind.ante strong { color: var(--crimson); }
+  .next {
+    margin-top: 16px;
+    color: var(--muted);
+    font-size: clamp(16px, 2vw, 22px);
+  }
+  .next b { color: var(--paper); font-weight: 700; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 22px max(18px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+  }
+  .controls button, .ghost, .primary {
+    border: 1px solid #3a3a3d;
+    background: transparent;
+    color: var(--paper);
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .controls button:hover, .ghost:hover, .primary:hover { border-color: var(--paper); }
+  #pauseBtn {
+    background: var(--paper);
+    color: #111;
+    border-color: var(--paper);
+    min-width: 180px;
+    font-size: 18px;
+  }
+  #pauseBtn.is-paused {
+    background: var(--crimson);
+    border-color: var(--crimson);
+    color: white;
+  }
+  .rebuy-count {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .rebuy-count b {
+    color: var(--paper);
+    font-size: 20px;
+    min-width: 1.4em;
+    text-align: center;
+  }
+  .rebuy-count button {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-size: 22px;
+  }
+  .screen {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 100%;
+    height: 100dvh;
+    background: rgba(8, 8, 9, 0.96);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 20;
+  }
+  #breakScreen { z-index: 30; }
+  .screen[hidden] {
+    display: none !important;
+    pointer-events: none;
+  }
+  .panel {
+    width: min(760px, 100%);
+    background: #121214;
+    border-top: 3px solid var(--crimson);
+    padding: 28px 28px 24px;
+    margin: auto;
+  }
+  .panel h2 { margin: 0 0 8px; font-size: 32px; }
+  #breakClock { font-size: clamp(64px, 12vw, 120px); margin: 4px 0 8px; }
+  .panel p { margin: 0 0 18px; color: var(--muted); line-height: 1.45; }
+  .start-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 24px;
+    margin: 0 0 22px;
+    padding: 0;
+    list-style: none;
+    color: var(--paper);
+  }
+  .start-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .primary {
+    background: var(--crimson-deep);
+    border-color: var(--crimson-deep);
+    color: white;
+    padding: 14px 22px;
+    font-size: 18px;
+  }
+  .fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  label { display: block; color: var(--muted); font-size: 13px; font-weight: 700; }
+  input[type="number"] {
+    width: 100%;
+    margin-top: 6px;
+    background: #0c0c0d;
+    color: var(--paper);
+    border: 1px solid #3a3a3d;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .avg {
+    margin: 4px 0 14px;
+    font-size: 18px;
+  }
+  .avg b { color: var(--ok); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .cols button {
+    text-align: left;
+    padding: 12px 14px;
+    background: #0c0c0d;
+    color: var(--paper);
+    border: 1px solid #3a3a3d;
+    border-radius: 4px;
+  }
+  .cols button small { display: block; color: var(--muted); font-weight: 400; margin-top: 3px; }
+  .cols button.suggested {
+    border-color: var(--ok);
+    box-shadow: inset 3px 0 0 var(--ok);
+  }
+  .cols button.picked {
+    background: var(--crimson-deep);
+    border-color: var(--crimson-deep);
+    color: white;
+  }
+  .cols button.picked small { color: #f6e6e8; }
+  .check {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+    font-weight: 400;
+    color: var(--paper);
+  }
+  .break-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 900px) {
+    .blinds { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .blind.ante { grid-column: 1 / -1; }
+    .blind strong { font-size: clamp(28px, 8vw, 48px); }
+    .clock { font-size: clamp(72px, 24vw, 160px); }
+    .rebuy-count { margin-left: 0; width: 100%; justify-content: flex-end; }
+    .fields, .cols, .start-list { grid-template-columns: 1fr; }
+    .top { padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
+    .controls button { flex: 1 1 calc(50% - 10px); }
+    #pauseBtn { flex: 1 1 100%; }
+    .panel { padding: 22px 16px 18px; }
+    .panel h2 { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <div class="kicker">HOLD'EM · 8 ИГРОКОВ</div>
+      <h1 id="levelTitle">Уровень 1</h1>
+    </div>
+    <div class="phase open" id="phase">
+      <span id="phaseText">РЕБАЙ ОТКРЫТ</span>
+      <small id="elapsed">В игре 0:00</small>
+    </div>
+  </header>
+
+  <main>
+    <div class="clock" id="clock">15:00</div>
+    <div class="paused-flag" id="pausedFlag"></div>
+    <div class="blinds">
+      <div class="blind"><span>МАЛЫЙ</span><strong id="sb">100</strong></div>
+      <div class="blind"><span>БОЛЬШОЙ</span><strong id="bb">200</strong></div>
+      <div class="blind ante"><span>АНТЕ</span><strong id="ante">—</strong></div>
+    </div>
+    <div class="next" id="nextLine">Дальше <b>уровень 2</b> · 200 / 400</div>
+  </main>
+
+  <footer class="controls">
+    <button id="pauseBtn" type="button">Пауза</button>
+    <button id="prevBtn" type="button">Предыдущий</button>
+    <button id="nextBtn" type="button">Следующий</button>
+    <button id="soundBtn" type="button">Звук: вкл</button>
+    <button id="resetBtn" type="button">Сброс</button>
+    <div class="rebuy-count" id="rebuyBox">
+      <span>Ребаев</span>
+      <button id="rebuyMinus" type="button" aria-label="Меньше ребаев">−</button>
+      <b id="rebuyNum">0</b>
+      <button id="rebuyPlus" type="button" aria-label="Ребай">+</button>
+    </div>
+  </footer>
+
+  <section class="screen" id="startScreen">
+    <div class="panel">
+      <div class="kicker">STRUCTURE CLOCK</div>
+      <h2>Техасский холдем</h2>
+      <p>Восемь игроков. Уровень 15 минут. Ребай без лимита до конца 8-го уровня, аддон на десятиминутном перерыве, дальше игра на вылет.</p>
+      <ul class="start-list">
+        <li>Старт — 30 000 фишек, блайнды 100 / 200</li>
+        <li>Ребай — 30 000, пока стек не больше 30 000</li>
+        <li>Аддон — 40 000 один раз, в 2:00</li>
+        <li>Пробел ставит часы на паузу</li>
+      </ul>
+      <button class="primary" id="startBtn" type="button">Начать турнир</button>
+    </div>
+  </section>
+
+  <section class="screen" id="breakScreen" hidden>
+    <div class="panel">
+      <div class="kicker">ПЕРЕРЫВ</div>
+      <div class="clock" id="breakClock">10:00</div>
+      <h2>Аддон</h2>
+      <p>Ребаи закрыты. Отметьте, сколько ребаев ушло за стол и сколько игроков ещё в игре. Часы сами предложат колонку. Вылет начнётся, когда перерыв дойдёт до нуля, или сразу по кнопке.</p>
+      <div class="fields">
+        <label>Ребаев за столом
+          <input id="rebuyInput" type="number" min="0" step="1" value="0">
+        </label>
+        <label>Игроков осталось
+          <input id="aliveInput" type="number" min="2" max="8" step="1" value="8">
+        </label>
+      </div>
+      <div class="avg" id="avgOut">Средний стек <b>—</b></div>
+      <div class="cols" id="colButtons"></div>
+      <label class="check">
+        <input id="skipFirst" type="checkbox">
+        Средний стек выше 200 000 — начать вылет с уровня 10
+      </label>
+      <div class="break-actions">
+        <button class="primary" id="startFreeze" type="button">Начать вылет</button>
+        <button class="ghost" id="breakPause" type="button">Пауза</button>
+      </div>
+    </div>
+  </section>
+
+<script>
+const LEVEL_MS = 15 * 60 * 1000;
+const BREAK_MS = 10 * 60 * 1000;
+const START_PLAYERS = 8;
+const START_STACK = 30000;
+const REBUY_STACK = 30000;
+const ADDON_STACK = 40000;
+
+const REBUY = [
+  [100, 200, 0],
+  [200, 400, 0],
+  [300, 600, 0],
+  [400, 800, 0],
+  [600, 1200, 0],
+  [800, 1600, 0],
+  [1000, 2000, 0],
+  [1500, 3000, 0],
+];
+
+const COLUMNS = [
+  {
+    id: "low",
+    name: "до 80 000",
+    hint: "0–2 ребая",
+    blinds: [
+      [1000, 2000, 2000],
+      [1000, 2000, 2000],
+      [1600, 3000, 3000],
+      [2000, 4000, 4000],
+      [3000, 6000, 6000],
+      [5000, 10000, 10000],
+      [8000, 16000, 16000],
+      [12000, 24000, 24000],
+    ],
+  },
+  {
+    id: "mid",
+    name: "80–115 000",
+    hint: "3–12 ребаев",
+    blinds: [
+      [1000, 3000, 3000],
+      [1600, 3000, 3000],
+      [2000, 4000, 4000],
+      [3000, 6000, 6000],
+      [4000, 8000, 8000],
+      [6000, 12000, 12000],
+      [10000, 20000, 20000],
+      [16000, 30000, 30000],
+    ],
+  },
+  {
+    id: "high",
+    name: "115–150 000",
+    hint: "13–21 ребай",
+    blinds: [
+      [2000, 4000, 4000],
+      [2500, 5000, 5000],
+      [3000, 6000, 6000],
+      [4000, 8000, 8000],
+      [6000, 12000, 12000],
+      [10000, 20000, 20000],
+      [15000, 30000, 30000],
+      [25000, 50000, 50000],
+    ],
+  },
+  {
+    id: "huge",
+    name: "от 150 000",
+    hint: "22 ребая и больше",
+    blinds: [
+      [2500, 5000, 5000],
+      [2500, 5000, 5000],
+      [4000, 8000, 8000],
+      [5000, 10000, 10000],
+      [8000, 16000, 16000],
+      [12000, 24000, 24000],
+      [20000, 40000, 40000],
+      [30000, 60000, 60000],
+    ],
+  },
+];
+
+const $ = (id) => document.getElementById(id);
+
+let phase = "idle";
+let running = false;
+let endsAt = 0;
+let remaining = LEVEL_MS;
+let rebuyIndex = 0;
+let freezeIndex = 0;
+let column = 1;
+let columnTouched = false;
+let rebuys = 0;
+let elapsed = 0;
+let runSince = 0;
+let soundOn = true;
+let audioCtx = null;
+let warned = false;
+
+function fmt(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+}
+function fmtLong(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) return h + ":" + String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+  return m + ":" + String(r).padStart(2, "0");
+}
+function chips(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+function roundBlind(n) {
+  const step = n >= 50000 ? 5000 : n >= 10000 ? 1000 : n >= 2000 ? 500 : 100;
+  return Math.max(step, Math.round(n / step) * step);
+}
+function blindAt(list, index) {
+  if (index < list.length) return list[index];
+  let last = list[list.length - 1];
+  for (let i = list.length; i <= index; i++) {
+    const bb = roundBlind(last[1] * 1.5);
+    const sb = roundBlind(bb / 2);
+    last = [sb, bb, last[2] ? bb : 0];
+  }
+  return last;
+}
+function currentBlind() {
+  if (phase === "break") return null;
+  if (phase === "freeze") return blindAt(COLUMNS[column].blinds, freezeIndex);
+  return blindAt(REBUY, rebuyIndex);
+}
+function nextBlind() {
+  if (phase === "idle" || phase === "rebuy") {
+    if (rebuyIndex < REBUY.length - 1) return { label: "уровень " + (rebuyIndex + 2), blind: REBUY[rebuyIndex + 1] };
+    return { label: "перерыв и аддон", blind: null };
+  }
+  if (phase === "break") {
+    const idx = $("skipFirst").checked ? 1 : 0;
+    return { label: "уровень " + (9 + idx), blind: COLUMNS[column].blinds[idx] };
+  }
+  const idx = freezeIndex + 1;
+  return { label: "уровень " + (9 + idx), blind: blindAt(COLUMNS[column].blinds, idx) };
+}
+function leftMs() {
+  if (!running) return remaining;
+  return Math.max(0, endsAt - Date.now());
+}
+function elapsedNow() {
+  return elapsed + (running ? Date.now() - runSince : 0);
+}
+
+function render() {
+  const left = leftMs();
+  $("clock").textContent = fmt(left);
+  $("breakClock").textContent = fmt(left);
+  $("clock").classList.toggle("warn", running && left <= 60000 && phase !== "idle");
+  $("breakClock").classList.toggle("warn", running && left <= 60000 && phase === "break");
+  $("pausedFlag").textContent = phase !== "idle" && !running ? "ПАУЗА" : "";
+  $("elapsed").textContent = "В игре " + fmtLong(elapsedNow());
+  $("pauseBtn").textContent = running ? "Пауза" : "Продолжить";
+  $("pauseBtn").classList.toggle("is-paused", !running && phase !== "idle");
+  $("breakPause").textContent = running ? "Пауза" : "Продолжить";
+
+  const blind = currentBlind();
+  if (blind) {
+    $("sb").textContent = chips(blind[0]);
+    $("bb").textContent = chips(blind[1]);
+    $("ante").textContent = blind[2] ? chips(blind[2]) : "—";
+  }
+
+  if (phase === "idle" || phase === "rebuy") {
+    $("levelTitle").textContent = "Уровень " + (rebuyIndex + 1);
+    $("phase").className = "phase open";
+    $("phaseText").textContent = "РЕБАЙ ОТКРЫТ";
+  } else if (phase === "break") {
+    $("levelTitle").textContent = "Перерыв";
+    $("phase").className = "phase closed";
+    $("phaseText").textContent = "РЕБАИ ЗАКРЫТЫ";
+    $("sb").textContent = "—";
+    $("bb").textContent = "—";
+    $("ante").textContent = "—";
+  } else {
+    $("levelTitle").textContent = "Уровень " + (9 + freezeIndex);
+    $("phase").className = "phase closed";
+    $("phaseText").textContent = "ИГРА НА ВЫЛЕТ · " + COLUMNS[column].name;
+  }
+
+  const nxt = nextBlind();
+  if (!nxt.blind) {
+    $("nextLine").innerHTML = "Дальше <b>" + nxt.label + "</b>";
+  } else {
+    const ante = nxt.blind[2] ? " · анте " + chips(nxt.blind[2]) : "";
+    $("nextLine").innerHTML = "Дальше <b>" + nxt.label + "</b> · " + chips(nxt.blind[0]) + " / " + chips(nxt.blind[1]) + ante;
+  }
+  $("rebuyBox").style.visibility = phase === "freeze" ? "hidden" : "visible";
+  $("rebuyNum").textContent = String(rebuys);
+  document.title = fmt(left) + " · " + ($("bb").textContent === "—" ? "перерыв" : $("sb").textContent + "/" + $("bb").textContent);
+
+  if (running && left <= 10000 && !warned && soundOn) {
+    warned = true;
+    chime(660, 0.12);
+  }
+  if (left > 10000) warned = false;
+}
+
+function startRun(ms) {
+  if (running && runSince) elapsed += Date.now() - runSince;
+  remaining = ms;
+  endsAt = Date.now() + ms;
+  running = true;
+  runSince = Date.now();
+  warned = false;
+}
+function pause() {
+  if (phase === "idle" || !running) return;
+  remaining = leftMs();
+  elapsed += Date.now() - runSince;
+  running = false;
+  render();
+}
+function resume() {
+  if (phase === "idle" || running) return;
+  startRun(remaining);
+  render();
+}
+function togglePause() {
+  if (phase === "idle") return;
+  if (running) pause();
+  else resume();
+}
+
+function playLevel(which) {
+  phase = which;
+  $("breakScreen").hidden = which !== "break";
+  $("startScreen").hidden = true;
+  startRun(which === "break" ? BREAK_MS : LEVEL_MS);
+  if (which === "break") {
+    columnTouched = false;
+    $("rebuyInput").value = String(rebuys);
+    refreshAverage();
+  }
+  render();
+}
+
+function advance() {
+  chime(880, 0.18);
+  setTimeout(() => chime(1175, 0.22), 160);
+  if (phase === "rebuy") {
+    if (rebuyIndex < REBUY.length - 1) {
+      rebuyIndex += 1;
+      playLevel("rebuy");
+    } else {
+      playLevel("break");
+    }
+    return;
+  }
+  if (phase === "break") {
+    beginFreeze();
+    return;
+  }
+  freezeIndex += 1;
+  playLevel("freeze");
+}
+
+function beginFreeze() {
+  column = selectedColumn();
+  freezeIndex = $("skipFirst").checked ? 1 : 0;
+  playLevel("freeze");
+}
+
+function goPrev() {
+  if (phase === "idle") return;
+  if (phase === "rebuy" && rebuyIndex === 0) return;
+  if (phase === "rebuy") rebuyIndex -= 1;
+  else if (phase === "break") {
+    rebuyIndex = REBUY.length - 1;
+    playLevel("rebuy");
+    return;
+  } else if (freezeIndex === 0) {
+    playLevel("break");
+    return;
+  } else freezeIndex -= 1;
+  playLevel(phase);
+}
+
+function goNext() {
+  if (phase === "idle") return;
+  if (phase === "break") {
+    beginFreeze();
+    return;
+  }
+  if (phase === "rebuy" && rebuyIndex >= REBUY.length - 1) {
+    playLevel("break");
+    return;
+  }
+  if (phase === "rebuy") rebuyIndex += 1;
+  else freezeIndex += 1;
+  playLevel(phase);
+}
+
+function tick() {
+  if (running && Date.now() >= endsAt) {
+    let guard = 0;
+    while (running && Date.now() >= endsAt && guard++ < 12) advance();
+  }
+  render();
+}
+
+function unlockAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+function chime(freq, dur) {
+  if (!soundOn || !audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = "sine";
+  o.frequency.value = freq;
+  o.connect(g);
+  g.connect(audioCtx.destination);
+  const t = audioCtx.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+function averageStack() {
+  const alive = Math.max(2, Math.min(8, Number($("aliveInput").value) || START_PLAYERS));
+  const r = Math.max(0, Number($("rebuyInput").value) || 0);
+  const total = START_PLAYERS * START_STACK + r * REBUY_STACK + alive * ADDON_STACK;
+  return { alive, rebuys: r, avg: Math.round(total / alive) };
+}
+function columnFor(avg) {
+  if (avg <= 80000) return 0;
+  if (avg <= 115000) return 1;
+  if (avg <= 150000) return 2;
+  return 3;
+}
+function selectedColumn() {
+  const picked = document.querySelector(".cols button.picked");
+  if (picked) return Number(picked.dataset.index);
+  return columnFor(averageStack().avg);
+}
+function refreshAverage() {
+  const { avg } = averageStack();
+  $("avgOut").innerHTML = "Средний стек <b>" + chips(avg) + "</b>";
+  const suggested = columnFor(avg);
+  document.querySelectorAll(".cols button").forEach((btn) => {
+    btn.classList.toggle("suggested", Number(btn.dataset.index) === suggested);
+  });
+  $("skipFirst").checked = avg > 200000;
+  if (!columnTouched) {
+    document.querySelectorAll(".cols button").forEach((btn) => {
+      btn.classList.toggle("picked", Number(btn.dataset.index) === suggested);
+    });
+    column = suggested;
+  }
+}
+
+function resetAll() {
+  if (phase !== "idle" && !confirm("Сбросить турнир и вернуть часы на уровень 1?")) return;
+  phase = "idle";
+  running = false;
+  remaining = LEVEL_MS;
+  rebuyIndex = 0;
+  freezeIndex = 0;
+  column = 1;
+  rebuys = 0;
+  columnTouched = false;
+  elapsed = 0;
+  $("startScreen").hidden = false;
+  $("breakScreen").hidden = true;
+  $("rebuyInput").value = "0";
+  $("aliveInput").value = "8";
+  document.querySelectorAll(".cols button").forEach((b) => b.classList.remove("picked"));
+  render();
+}
+
+COLUMNS.forEach((col, i) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.dataset.index = String(i);
+  btn.innerHTML = col.name + "<small>" + col.hint + "</small>";
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".cols button").forEach((b) => b.classList.remove("picked"));
+    btn.classList.add("picked");
+    columnTouched = true;
+    column = i;
+    render();
+  });
+  $("colButtons").appendChild(btn);
+});
+
+let startLock = 0;
+function onStart(event) {
+  const now = Date.now();
+  if (now - startLock < 700) return;
+  startLock = now;
+  if (event) event.preventDefault();
+  unlockAudio();
+  elapsed = 0;
+  rebuyIndex = 0;
+  playLevel("rebuy");
+}
+$("startBtn").addEventListener("pointerup", onStart);
+$("startBtn").addEventListener("click", onStart);
+$("pauseBtn").addEventListener("click", () => { unlockAudio(); togglePause(); });
+$("breakPause").addEventListener("click", () => { unlockAudio(); togglePause(); });
+$("prevBtn").addEventListener("click", goPrev);
+$("nextBtn").addEventListener("click", goNext);
+$("soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn;
+  $("soundBtn").textContent = soundOn ? "Звук: вкл" : "Звук: выкл";
+  if (soundOn) { unlockAudio(); chime(880, 0.12); }
+});
+$("resetBtn").addEventListener("click", resetAll);
+$("rebuyPlus").addEventListener("click", () => { rebuys += 1; $("rebuyInput").value = String(rebuys); render(); });
+$("rebuyMinus").addEventListener("click", () => { rebuys = Math.max(0, rebuys - 1); $("rebuyInput").value = String(rebuys); render(); });
+$("rebuyInput").addEventListener("input", () => { rebuys = Math.max(0, Number($("rebuyInput").value) || 0); refreshAverage(); render(); });
+$("aliveInput").addEventListener("input", refreshAverage);
+$("startFreeze").addEventListener("click", () => { unlockAudio(); beginFreeze(); });
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea")) return;
+  if (e.code === "Space") { e.preventDefault(); unlockAudio(); togglePause(); }
+  else if (e.key === "ArrowRight") goNext();
+  else if (e.key === "ArrowLeft") goPrev();
+});
+
+setInterval(tick, 200);
+render();
+</script>
+</body>
+</html>
