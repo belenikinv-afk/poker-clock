@@ -467,6 +467,7 @@
           <label>Стартовый взнос
             <input id="buyInInput" type="number" min="1" step="1" inputmode="numeric" placeholder="1000">
           </label>
+          <p class="cash-meta">Докуп во время игры может быть любой суммой, не только этим взносом.</p>
           <div id="cashNames"></div>
           <button class="ghost" id="addDraft" type="button">Добавить игрока</button>
         </div>
@@ -519,6 +520,9 @@
       <div id="cashLive">
         <h2>Учёт банка</h2>
         <p id="cashBuyLine"></p>
+        <label>Сумма докупа
+          <input id="cashTopup" type="number" min="1" step="1" inputmode="numeric">
+        </label>
         <div id="cashRows"></div>
         <div class="cash-pot" id="cashPot">0</div>
         <div class="break-actions">
@@ -530,7 +534,7 @@
       <div id="cashResult" hidden>
         <h2>Кто сколько внёс</h2>
         <table class="cash-table">
-          <thead><tr><td>Игрок</td><td>Докупов</td><td>Внёс</td></tr></thead>
+          <thead><tr><td>Игрок</td><td>Докупы</td><td>Внёс</td></tr></thead>
           <tbody id="cashResultRows"></tbody>
         </table>
         <div class="cash-pot">Банк <span id="cashTotal">0</span></div>
@@ -644,12 +648,23 @@ function escapeHtml(text) {
 function newId() {
   return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
-function cleanCash(list) {
+function playerTopups(player, buyIn) {
+  if (Array.isArray(player.topups)) {
+    return player.topups.map((n) => Math.max(0, Math.round(Number(n) || 0))).filter((n) => n > 0).slice(0, 40);
+  }
+  const count = Math.max(0, Math.round(Number(player.rebuys) || 0));
+  const stake = Math.max(0, Math.round(Number(buyIn) || 0));
+  return Array.from({ length: Math.min(count, 40) }, () => stake).filter((n) => n > 0);
+}
+function playerPaid(player, buyIn) {
+  return Math.max(0, Math.round(Number(buyIn) || 0)) + playerTopups(player, buyIn).reduce((sum, n) => sum + n, 0);
+}
+function cleanCash(list, buyIn) {
   if (!Array.isArray(list)) return [];
   return list.slice(0, 18).map((player, index) => ({
     id: String(player.id || ("p" + index)),
     name: String(player.name || "").trim().slice(0, 40),
-    rebuys: Math.max(0, Math.round(Number(player.rebuys) || 0)),
+    topups: playerTopups(player, buyIn),
   })).filter((player) => player.name);
 }
 function fmt(ms) {
@@ -956,8 +971,8 @@ function applyAction(st, kind, data) {
     return true;
   }
   if (kind === "startCash" && st.phase === "idle") {
-    const players = cleanCash(data.players);
     const buyIn = Math.max(0, Math.round(Number(data.buyIn) || 0));
+    const players = cleanCash(data.players, buyIn);
     if (players.length < 2 || buyIn < 1) return false;
     st.mode = "cash";
     st.phase = "cash";
@@ -973,7 +988,7 @@ function applyAction(st, kind, data) {
     return true;
   }
   if (kind === "cashEdit" && st.mode === "cash" && !st.cashClosed) {
-    const players = cleanCash(data.players);
+    const players = cleanCash(data.players, st.buyIn);
     if (!players.length) return false;
     st.cashPlayers = players;
     st.players = players.length;
@@ -1222,6 +1237,16 @@ function paint() {
   }
 }
 
+function cashMeta(player, buyIn) {
+  const parts = playerTopups(player, buyIn);
+  const extra = parts.length ? " · " + parts.map(money).join(" + ") : "";
+  return "всего <b>" + money(playerPaid(player, buyIn)) + "</b>" + extra;
+}
+function topupAmount() {
+  const typed = Math.round(Number($("cashTopup").value));
+  if (typed >= 1) return typed;
+  return Math.max(1, Math.round(Number(snapshot && snapshot.buyIn) || 0));
+}
 let cashSig = "";
 let setupMode = "tournament";
 let draft = [{ id: newId(), name: "" }, { id: newId(), name: "" }];
@@ -1229,18 +1254,19 @@ function paintCash(st) {
   const closed = !!st.cashClosed;
   const buyIn = Math.max(0, Number(st.buyIn) || 0);
   const rows = Array.isArray(st.cashPlayers) ? st.cashPlayers : [];
-  const total = rows.reduce((sum, player) => sum + (1 + Number(player.rebuys || 0)) * buyIn, 0);
+  const total = rows.reduce((sum, player) => sum + playerPaid(player, buyIn), 0);
   $("cashLive").hidden = closed;
   $("cashResult").hidden = !closed;
   if (closed) {
     $("cashTotal").textContent = money(total);
     $("cashResultRows").innerHTML = rows.map((player) => {
-      const entries = 1 + Number(player.rebuys || 0);
-      return "<tr><td>" + escapeHtml(player.name) + "</td><td>" + Number(player.rebuys || 0) + "</td><td>" + money(entries * buyIn) + "</td></tr>";
+      const parts = playerTopups(player, buyIn).map(money).join(" + ");
+      return "<tr><td>" + escapeHtml(player.name) + "</td><td>" + (parts || "—") + "</td><td>" + money(playerPaid(player, buyIn)) + "</td></tr>";
     }).join("");
     return;
   }
-  $("cashBuyLine").textContent = "Стартовый взнос " + money(buyIn) + ". Докуп стоит столько же.";
+  $("cashBuyLine").textContent = "Стартовый взнос " + money(buyIn) + ". Докуп может быть больше или меньше.";
+  if (document.activeElement !== $("cashTopup") && $("cashTopup").value === "") $("cashTopup").value = String(buyIn);
   $("cashPot").textContent = "В банке " + money(total);
   const samePlayers = rows.map((player) => player.id).join("|") === Array.from($("cashRows").querySelectorAll(".cash-row")).map((row) => row.dataset.id).join("|");
   const editingName = document.activeElement && document.activeElement.classList.contains("cash-name") && $("cashRows").contains(document.activeElement);
@@ -1249,8 +1275,7 @@ function paintCash(st) {
       const row = $("cashRows").querySelector('.cash-row[data-id="' + player.id + '"]');
       if (!row) return;
       const meta = row.querySelector(".cash-meta");
-      const entries = 1 + Number(player.rebuys || 0);
-      if (meta) meta.innerHTML = "докупов <b>" + Number(player.rebuys || 0) + "</b> · " + money(entries * buyIn);
+      if (meta) meta.innerHTML = cashMeta(player, buyIn);
       const input = row.querySelector(".cash-name");
       if (input && input !== document.activeElement && input.value !== player.name) input.value = player.name;
     });
@@ -1262,10 +1287,9 @@ function paintCash(st) {
   if (sig === cashSig && $("cashRows").childElementCount) return;
   cashSig = sig;
   $("cashRows").innerHTML = rows.map((player) => {
-    const entries = 1 + Number(player.rebuys || 0);
     return '<div class="cash-row" data-id="' + escapeHtml(player.id) + '">'
       + '<input class="cash-name" value="' + escapeHtml(player.name) + '" aria-label="Имя">'
-      + '<span class="cash-meta">докупов <b>' + Number(player.rebuys || 0) + "</b> · " + money(entries * buyIn) + "</span>"
+      + '<span class="cash-meta">' + cashMeta(player, buyIn) + "</span>"
       + '<span class="stepper"><button type="button" data-act="minus" aria-label="Меньше докупов">−</button>'
       + '<button type="button" class="plus" data-act="plus" aria-label="Докуп">+</button></span>'
       + '<button type="button" class="ghost" data-act="remove">Убрать</button></div>';
@@ -1307,7 +1331,7 @@ function onStart(event) {
   $("playersError").textContent = "";
   if (setupMode === "cash") {
     readDraft();
-    const players = draft.map((player) => ({ id: player.id, name: player.name.trim(), rebuys: 0 })).filter((player) => player.name);
+    const players = draft.map((player) => ({ id: player.id, name: player.name.trim(), topups: [] })).filter((player) => player.name);
     const buyIn = Number($("buyInInput").value);
     if (players.length < 2) {
       $("playersError").textContent = "Введите имена минимум двух игроков";
@@ -1355,7 +1379,7 @@ $("cashRows").addEventListener("click", (event) => {
   if (!button || !snapshot) return;
   const row = button.closest(".cash-row");
   const id = row && row.dataset.id;
-  const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player));
+  const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player, { topups: playerTopups(player, snapshot.buyIn) }));
   if (button.dataset.act === "remove") {
     cashSig = "";
     act("cashEdit", { players: list.filter((player) => player.id !== id) });
@@ -1363,8 +1387,8 @@ $("cashRows").addEventListener("click", (event) => {
   }
   const item = list.find((player) => player.id === id);
   if (!item) return;
-  if (button.dataset.act === "plus") item.rebuys += 1;
-  if (button.dataset.act === "minus") item.rebuys = Math.max(0, item.rebuys - 1);
+  if (button.dataset.act === "plus") item.topups.push(topupAmount());
+  if (button.dataset.act === "minus") item.topups.pop();
   cashSig = "";
   act("cashEdit", { players: list });
 });
@@ -1381,7 +1405,7 @@ $("cashRows").addEventListener("change", (event) => {
 $("cashAdd").addEventListener("click", () => {
   if (!snapshot || (snapshot.cashPlayers || []).length >= 18) return;
   const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player));
-  list.push({ id: newId(), name: "Игрок " + (list.length + 1), rebuys: 0 });
+  list.push({ id: newId(), name: "Игрок " + (list.length + 1), topups: [] });
   cashSig = "";
   act("cashEdit", { players: list });
 });
