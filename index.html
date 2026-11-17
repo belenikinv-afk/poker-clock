@@ -101,7 +101,7 @@
   }
   .blinds {
     display: grid;
-    grid-template-columns: 1fr 1.15fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 18px;
     width: min(980px, 100%);
     margin-top: 18px;
@@ -112,7 +112,6 @@
     padding: 14px 12px 16px;
     text-align: center;
   }
-  .blind.ante { border-top-color: var(--crimson); }
   .blind span {
     display: block;
     color: var(--muted);
@@ -127,7 +126,6 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.03em;
   }
-  .blind.ante strong { color: var(--crimson); }
   .next {
     margin-top: 16px;
     color: var(--muted);
@@ -381,8 +379,7 @@
   .head-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
   #loginScreen { z-index: 40; }
   @media (max-width: 900px) {
-    .blinds { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .blind.ante { grid-column: 1 / -1; }
+    .blinds { gap: 10px; }
     .blind strong { font-size: clamp(28px, 8vw, 48px); }
     .clock { font-size: clamp(72px, 24vw, 160px); }
     .rebuy-count { margin-left: 0; width: 100%; justify-content: flex-end; }
@@ -419,7 +416,6 @@
     <div class="blinds">
       <div class="blind"><span>МАЛЫЙ</span><strong id="sb">100</strong></div>
       <div class="blind"><span>БОЛЬШОЙ</span><strong id="bb">200</strong></div>
-      <div class="blind ante"><span>АНТЕ</span><strong id="ante">—</strong></div>
     </div>
     <div class="next" id="nextLine">Дальше <b>уровень 2</b> · 200 / 400</div>
     <div class="stack-line">СРЕДНИЙ СТЕК<b id="avgMain">—</b></div>
@@ -589,10 +585,10 @@ const REBUY = [
   [1500, 3000, 0],
 ];
 const COLUMNS = [
-  { name: "до 80 000", hint: "0–2 ребая", blinds: [[1000,2000,2000],[1000,2000,2000],[1500,3000,3000],[2000,4000,4000],[3000,6000,6000],[5000,10000,10000],[8000,16000,16000],[12000,24000,24000]] },
-  { name: "80–115 000", hint: "3–12 ребаев", blinds: [[1000,3000,3000],[1500,3000,3000],[2000,4000,4000],[3000,6000,6000],[4000,8000,8000],[6000,12000,12000],[10000,20000,20000],[16000,30000,30000]] },
-  { name: "115–150 000", hint: "13–21 ребай", blinds: [[2000,4000,4000],[2500,5000,5000],[3000,6000,6000],[4000,8000,8000],[6000,12000,12000],[10000,20000,20000],[15000,30000,30000],[25000,50000,50000]] },
-  { name: "от 150 000", hint: "22 ребая и больше", blinds: [[2500,5000,5000],[2500,5000,5000],[4000,8000,8000],[5000,10000,10000],[8000,16000,16000],[12000,24000,24000],[20000,40000,40000],[30000,60000,60000]] },
+  { name: "до 80 000", hint: "0–2 ребая", blinds: [[1500,3000,0],[1500,3000,0],[2500,5000,0],[3000,6000,0],[5000,10000,0],[8000,16000,0],[12000,24000,0],[20000,40000,0]] },
+  { name: "80–115 000", hint: "3–12 ребаев", blinds: [[2500,5000,0],[2500,5000,0],[3000,6000,0],[5000,10000,0],[6000,12000,0],[10000,20000,0],[15000,30000,0],[25000,50000,0]] },
+  { name: "115–150 000", hint: "13–21 ребай", blinds: [[3000,6000,0],[4000,8000,0],[5000,10000,0],[6000,12000,0],[10000,20000,0],[15000,30000,0],[25000,50000,0],[40000,80000,0]] },
+  { name: "от 150 000", hint: "22 ребая и больше", blinds: [[4000,8000,0],[4000,8000,0],[6000,12000,0],[8000,16000,0],[12000,24000,0],[20000,40000,0],[30000,60000,0],[50000,100000,0]] },
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -672,7 +668,7 @@ function bump(bb) {
   const raw = bb * 1.5;
   const step = bb >= 20000 ? 5000 : bb >= 8000 ? 1000 : bb >= 2000 ? 500 : 100;
   const nextBb = Math.max(bb + step, Math.round(raw / step) * step);
-  return [nextBb / 2, nextBb, nextBb];
+  return [nextBb / 2, nextBb, 0];
 }
 function rowAt(index, column) {
   const blinds = COLUMNS[column].blinds;
@@ -1192,7 +1188,6 @@ function paint() {
     const row = showRow(REBUY[0], st);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
-    $("ante").textContent = "—";
     $("nextLine").innerHTML = "Дальше <b>уровень 2</b> · " + money(showRow(REBUY[1], st)[0]) + " / " + money(showRow(REBUY[1], st)[1]);
   } else if (st.phase === "rebuy") {
     phase.className = "phase open";
@@ -1201,7 +1196,6 @@ function paint() {
     $("levelTitle").textContent = "Уровень " + (st.rebuyIndex + 1);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
-    $("ante").textContent = "—";
     $("nextLine").innerHTML = nextInfo(st);
   } else if (onBreak) {
     phase.className = "phase";
@@ -1210,7 +1204,6 @@ function paint() {
     const row = showRow(REBUY[7], st);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
-    $("ante").textContent = "—";
     $("nextLine").innerHTML = nextInfo(st);
     paintColumns(st);
   } else {
@@ -1221,7 +1214,6 @@ function paint() {
     $("levelTitle").textContent = "Уровень " + (9 + st.freezeIndex);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
-    $("ante").textContent = money(row[2]);
     $("nextLine").innerHTML = nextInfo(st);
   }
   if (!idle && !onBreak && st.running && left <= 10000 && !warned) {
