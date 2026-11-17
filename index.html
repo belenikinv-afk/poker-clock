@@ -147,6 +147,14 @@
     font-size: clamp(32px, 5vw, 56px);
     letter-spacing: -0.03em;
   }
+  .count-line, .public-stats {
+    color: var(--muted);
+    font-weight: 700;
+    text-align: center;
+  }
+  .count-line { margin-top: 6px; font-size: 16px; letter-spacing: 0.04em; }
+  .public-stats { margin: 0 0 16px; font-size: 18px; line-height: 1.45; }
+  .public-stats b { color: var(--ok); font-size: 28px; }
   .fields .wide { grid-column: 1 / -1; }
   .next b { color: var(--paper); font-weight: 700; }
   .controls {
@@ -392,6 +400,7 @@
     </div>
     <div class="next" id="nextLine">Дальше <b>уровень 2</b> · 200 / 400</div>
     <div class="stack-line">СРЕДНИЙ СТЕК<b id="avgMain">—</b></div>
+    <div class="count-line" id="countLine">Ребаев 0 · Аддонов 0</div>
   </main>
 
   <footer class="controls" id="controls" hidden>
@@ -433,6 +442,7 @@
       <div class="clock" id="breakClock">10:00</div>
       <h2>Аддон</h2>
       <p id="breakText">Ребаи закрыты. Идёт десятиминутный перерыв.</p>
+      <div class="public-stats" id="publicStats">Ребаев 0 · Аддонов 0<br>Средний стек <b>—</b></div>
       <div class="admin-only" id="breakAdmin">
         <div class="fields">
           <label class="wide">Ребаев
@@ -692,6 +702,7 @@ function freshState() {
     elapsed: 0,
     runSince: 0,
     rev: 0,
+    updatedAt: 0,
   };
 }
 function fillDerived(st) {
@@ -814,29 +825,99 @@ function applyAction(st, kind, data) {
   }
   return false;
 }
-async function saveState(st) {
-  pendingSave = st;
-  const res = await fetch(STORE, {
-    method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(st),
-  });
-  if (res.ok && pendingSave === st) pendingSave = null;
+let writing = false;
+let queued = null;
+let repairs = 0;
+let pollMs = 3000;
+function storeUrl() {
+  return STORE + "?t=" + Date.now();
 }
-async function pull() {
-  if (pendingSave) {
-    await saveState(pendingSave);
-    return;
-  }
-  const res = await fetch(STORE, { cache: "no-store" });
-  if (!res.ok) return;
-  const data = await res.json();
-  if (!data || !data.phase) return;
-  if (snapshot && Number(data.rev || 0) < Number(snapshot.rev || 0)) return;
+function remoteIsNewer(data) {
+  if (!snapshot) return true;
+  const remoteRev = Number(data.rev || 0);
+  const localRev = Number(snapshot.rev || 0);
+  if (remoteRev !== localRev) return remoteRev > localRev;
+  return Number(data.updatedAt || 0) > Number(snapshot.updatedAt || 0);
+}
+function applyRemote(data) {
   fillDerived(data);
   snapshot = data;
+  repairs = 0;
   paint();
+}
+function queueSave(st) {
+  queued = st;
+  pendingSave = st;
+  drainSaves();
+}
+async function drainSaves() {
+  if (writing) return;
+  writing = true;
+  try {
+    while (queued) {
+      const st = queued;
+      queued = null;
+      let res;
+      try {
+        res = await fetch(STORE, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(st),
+        });
+      } catch (e) {
+        queued = queued || st;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      if (!res.ok) {
+        if (res.status === 429) pollMs = 15000;
+        queued = queued || st;
+        await new Promise((resolve) => setTimeout(resolve, res.status === 429 ? 15000 : 2000));
+        continue;
+      }
+      pollMs = 3000;
+      if (queued) continue;
+      const check = await fetch(storeUrl(), { cache: "no-store" });
+      if (!check.ok) break;
+      const data = await check.json();
+      if (!data || !data.phase) break;
+      if (Number(data.rev || 0) < Number(st.rev || 0)) {
+        if (repairs < 4) {
+          repairs += 1;
+          queued = snapshot && Number(snapshot.rev || 0) >= Number(st.rev || 0) ? snapshot : st;
+        }
+      } else if (remoteIsNewer(data)) {
+        applyRemote(data);
+      } else {
+        repairs = 0;
+      }
+    }
+  } finally {
+    writing = false;
+    pendingSave = queued;
+    if (queued) drainSaves();
+  }
+}
+async function pull() {
+  if (writing || queued) return;
+  const res = await fetch(storeUrl(), { cache: "no-store" });
+  if (res.status === 429) {
+    pollMs = Math.min(30000, Math.max(15000, pollMs * 2));
+    return;
+  }
+  if (!res.ok) return;
+  pollMs = 3000;
+  const data = await res.json();
+  if (!data || !data.phase) return;
+  if (remoteIsNewer(data)) {
+    applyRemote(data);
+    return;
+  }
+  if (admin && snapshot && Number(data.rev || 0) < Number(snapshot.rev || 0) && repairs < 4) {
+    repairs += 1;
+    queueSave(snapshot);
+  }
 }
 async function act(type, extra) {
   if (!admin) return;
@@ -844,10 +925,12 @@ async function act(type, extra) {
   const next = Object.assign({}, shown || freshState());
   if (!applyAction(next, type, extra || {})) return;
   next.rev = Number(next.rev || 0) + 1;
+  next.updatedAt = Date.now();
+  repairs = 0;
   fillDerived(next);
   snapshot = next;
   paint();
-  await saveState(next);
+  queueSave(next);
 }
 function paintColumns(st) {
   const sig = st.column + ":" + st.suggested;
@@ -873,9 +956,10 @@ function paint() {
   if (!st) return;
   if (admin && snapshot.running && levelMoved(st)) {
     st.rev = Number(snapshot.rev || 0) + 1;
+    st.updatedAt = Date.now();
     fillDerived(st);
     snapshot = st;
-    saveState(st);
+    queueSave(st);
   }
   const mark = [st.phase, st.rebuyIndex, st.freezeIndex].join(":");
   if (seen && mark !== lastMark && st.phase !== "idle") levelChime();
@@ -905,6 +989,9 @@ function paint() {
   $("elapsed").textContent = idle ? "Турнир ещё не начат" : "В игре " + fmtElapsed(playedMs(st));
   $("tableKicker").textContent = st.players ? "HOLD'EM · " + st.players + " ИГРОКОВ" : "HOLD'EM";
   $("avgMain").textContent = st.avg == null ? "—" : money(st.avg);
+  const countText = "Ребаев " + (Number(st.rebuys) || 0) + " · Аддонов " + (Number(st.addons) || 0);
+  $("countLine").textContent = countText;
+  $("publicStats").innerHTML = countText + "<br>Средний стек <b>" + (st.avg == null ? "—" : money(st.avg)) + "</b>";
   $("rebuyNum").textContent = String(st.rebuys);
   if (document.activeElement !== $("rebuyInput")) $("rebuyInput").value = st.rebuys;
   if (document.activeElement !== $("aliveInput")) $("aliveInput").value = st.alive || st.players || "";
@@ -1043,12 +1130,23 @@ document.addEventListener("keydown", (event) => {
 });
 
 setInterval(() => { if (snapshot) paint(); }, 200);
-setInterval(() => { pull().catch(() => {}); }, 15000);
+async function pollLoop() {
+  if (!document.hidden) {
+    try { await pull(); } catch (e) {}
+  }
+  setTimeout(pollLoop, document.hidden ? 20000 : pollMs);
+}
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && snapshot) paint();
+  if (!document.hidden) {
+    if (snapshot) paint();
+    pull().catch(() => {});
+  }
 });
-window.addEventListener("pageshow", () => { if (snapshot) paint(); });
-pull().catch(() => {});
+window.addEventListener("pageshow", () => {
+  if (snapshot) paint();
+  pull().catch(() => {});
+});
+pollLoop();
 </script>
 </body>
 </html>
