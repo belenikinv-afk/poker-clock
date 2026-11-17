@@ -1248,12 +1248,27 @@ function paintCash(st) {
     }).join("");
     return;
   }
-  if ($("cashRows").contains(document.activeElement)) return;
+  $("cashBuyLine").textContent = "Стартовый взнос " + money(buyIn) + ". Докуп стоит столько же.";
+  $("cashPot").textContent = "В банке " + money(total);
+  const samePlayers = rows.map((player) => player.id).join("|") === Array.from($("cashRows").querySelectorAll(".cash-row")).map((row) => row.dataset.id).join("|");
+  const editingName = document.activeElement && document.activeElement.classList.contains("cash-name") && $("cashRows").contains(document.activeElement);
+  if (samePlayers && $("cashRows").childElementCount) {
+    rows.forEach((player) => {
+      const row = $("cashRows").querySelector('.cash-row[data-id="' + player.id + '"]');
+      if (!row) return;
+      const meta = row.querySelector(".cash-meta");
+      const entries = 1 + Number(player.rebuys || 0);
+      if (meta) meta.innerHTML = "докупов <b>" + Number(player.rebuys || 0) + "</b> · " + money(entries * buyIn);
+      const input = row.querySelector(".cash-name");
+      if (input && input !== document.activeElement && input.value !== player.name) input.value = player.name;
+    });
+    cashSig = JSON.stringify(rows) + ":" + buyIn;
+    return;
+  }
+  if (editingName) return;
   const sig = JSON.stringify(rows) + ":" + buyIn;
   if (sig === cashSig && $("cashRows").childElementCount) return;
   cashSig = sig;
-  $("cashBuyLine").textContent = "Стартовый взнос " + money(buyIn) + ". Докуп стоит столько же.";
-  $("cashPot").textContent = "В банке " + money(total);
   $("cashRows").innerHTML = rows.map((player) => {
     const entries = 1 + Number(player.rebuys || 0);
     return '<div class="cash-row" data-id="' + escapeHtml(player.id) + '">'
