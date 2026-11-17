@@ -171,7 +171,8 @@
   .cash-pot { margin: 8px 0 16px; font-size: 28px; font-weight: 700; }
   .cash-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
   .cash-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
-  .cash-table td:last-child, .cash-table td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
+  .cash-table td:nth-child(n + 2) { text-align: right; font-variant-numeric: tabular-nums; }
+  .cash-table thead td { color: var(--muted); font-size: 13px; }
   @media (max-width: 900px) {
     .cash-row { grid-template-columns: 1fr auto; }
     .cash-meta { grid-column: 1 / -1; }
@@ -534,7 +535,7 @@
       <div id="cashResult" hidden>
         <h2>Кто сколько внёс</h2>
         <table class="cash-table">
-          <thead><tr><td>Игрок</td><td>Докупы</td><td>Внёс</td></tr></thead>
+          <thead><tr><td>Игрок</td><td>Стартовый взнос</td><td>Сумма докупов</td><td>Внёс</td></tr></thead>
           <tbody id="cashResultRows"></tbody>
         </table>
         <div class="cash-pot">Банк <span id="cashTotal">0</span></div>
@@ -1260,8 +1261,8 @@ function paintCash(st) {
   if (closed) {
     $("cashTotal").textContent = money(total);
     $("cashResultRows").innerHTML = rows.map((player) => {
-      const parts = playerTopups(player, buyIn).map(money).join(" + ");
-      return "<tr><td>" + escapeHtml(player.name) + "</td><td>" + (parts || "—") + "</td><td>" + money(playerPaid(player, buyIn)) + "</td></tr>";
+      const topups = playerTopups(player, buyIn).reduce((sum, n) => sum + n, 0);
+      return "<tr><td>" + escapeHtml(player.name) + "</td><td>" + money(buyIn) + "</td><td>" + money(topups) + "</td><td>" + money(playerPaid(player, buyIn)) + "</td></tr>";
     }).join("");
     return;
   }
