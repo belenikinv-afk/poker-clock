@@ -17,6 +17,7 @@
     --ok: #d7c39a;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg);
@@ -155,6 +156,28 @@
   .count-line { margin-top: 6px; font-size: 16px; letter-spacing: 0.04em; }
   .public-stats { margin: 0 0 16px; font-size: 18px; line-height: 1.45; }
   .public-stats b { color: var(--ok); font-size: 28px; }
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; }
+  .mode-switch button {
+    border: 1px solid #3a3a3d;
+    background: transparent;
+    color: var(--paper);
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .mode-switch button.picked { background: var(--crimson-deep); border-color: var(--crimson-deep); color: white; }
+  .stack-preview { color: var(--paper); font-weight: 700; }
+  .cash-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .cash-name { grid-column: 1 / -1; }
+  .cash-name, .draft-name { width: 100%; }
+  .cash-meta { color: var(--muted); font-size: 14px; font-weight: 700; }
+  .cash-pot { margin: 8px 0 16px; font-size: 28px; font-weight: 700; }
+  .cash-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .cash-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .cash-table td:last-child, .cash-table td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) {
+    .cash-row { grid-template-columns: 1fr auto; }
+    .cash-meta { grid-column: 1 / -1; }
+  }
   .fields .wide { grid-column: 1 / -1; }
   .next b { color: var(--paper); font-weight: 700; }
   .controls {
@@ -428,9 +451,30 @@
         <li>У игроков только просмотр. Старт и пауза у ведущего</li>
       </ul>
       <p id="viewerNote">Часы запустит ведущий. На этом экране видно текущий уровень, блайнды и средний стек.</p>
-      <label id="playersField" hidden>Игроков за столом
-        <input id="playersInput" type="number" min="2" max="18" step="1" inputmode="numeric" placeholder="8">
-      </label>
+      <div id="setup" hidden>
+        <div class="mode-switch">
+          <button type="button" id="modeTournament" class="picked">Турнир</button>
+          <button type="button" id="modeCash">Кэш</button>
+        </div>
+        <div id="tournamentSetup">
+          <div class="fields">
+            <label id="playersField">Игроков за столом
+              <input id="playersInput" type="number" min="2" max="18" step="1" inputmode="numeric" placeholder="8">
+            </label>
+            <label>Стартовый стек
+              <input id="stackInput" type="number" min="1000" step="100" inputmode="numeric" value="30000">
+            </label>
+          </div>
+          <p class="stack-preview" id="stackPreview"></p>
+        </div>
+        <div id="cashSetup" hidden>
+          <label>Стартовый взнос
+            <input id="buyInInput" type="number" min="1" step="1" inputmode="numeric" placeholder="1000">
+          </label>
+          <div id="cashNames"></div>
+          <button class="ghost" id="addDraft" type="button">Добавить игрока</button>
+        </div>
+      </div>
       <p class="login-error" id="playersError"></p>
       <button class="primary" id="startBtn" type="button" hidden>Начать турнир</button>
     </div>
@@ -463,13 +507,47 @@
         <div class="cols" id="colButtons"></div>
         <label class="check">
           <input id="skipFirst" type="checkbox">
-          Средний стек выше 200 000 — начать вылет с уровня 10
+          <span id="skipText">Средний стек выше 200 000 — начать вылет с уровня 10</span>
         </label>
         <div class="break-actions">
           <button class="primary" id="startFreeze" type="button">Начать вылет</button>
           <button class="ghost" id="breakPause" type="button">Пауза</button>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="screen" id="cashScreen" hidden>
+    <div class="panel">
+      <div class="kicker">КЭШ</div>
+      <div id="cashLive">
+        <h2>Учёт банка</h2>
+        <p id="cashBuyLine"></p>
+        <div id="cashRows"></div>
+        <div class="cash-pot" id="cashPot">0</div>
+        <div class="break-actions">
+          <button class="ghost" id="cashAdd" type="button">Добавить игрока</button>
+          <button class="primary" id="cashClose" type="button">Завершить игру</button>
+          <button class="ghost" id="cashReset" type="button">Сброс</button>
+        </div>
+      </div>
+      <div id="cashResult" hidden>
+        <h2>Кто сколько внёс</h2>
+        <table class="cash-table">
+          <thead><tr><td>Игрок</td><td>Докупов</td><td>Внёс</td></tr></thead>
+          <tbody id="cashResultRows"></tbody>
+        </table>
+        <div class="cash-pot">Банк <span id="cashTotal">0</span></div>
+        <button class="primary" id="cashAgain" type="button">Новая игра</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="cashPrivate" hidden>
+    <div class="panel">
+      <div class="kicker">КЭШ</div>
+      <h2>Игра идёт</h2>
+      <p>Учёт докупов и банка виден только ведущему.</p>
     </div>
   </section>
 
@@ -529,8 +607,54 @@ let lastMark = "";
 let seen = false;
 let warned = false;
 
+const BASE_STACK = 30000;
 function money(n) {
   return Number(n).toLocaleString("ru-RU");
+}
+function round100(n) {
+  return Math.max(100, Math.round(Number(n) / 100) * 100);
+}
+function chipPlan(start) {
+  const stack = round100(Math.max(1000, Number(start) || BASE_STACK));
+  return { start: stack, rebuy: stack, addon: round100(stack * 4 / 3) };
+}
+function stackFactor(st) {
+  return chipPlan(st && st.startStack).start / BASE_STACK;
+}
+function bands(st) {
+  const factor = stackFactor(st);
+  return [80000, 115000, 150000, 200000].map((n) => round100(n * factor));
+}
+function bandName(index, st) {
+  const edge = bands(st);
+  if (index === 0) return "до " + money(edge[0]);
+  if (index === 1) return money(edge[0]) + "–" + money(edge[1]);
+  if (index === 2) return money(edge[1]) + "–" + money(edge[2]);
+  return "от " + money(edge[2]);
+}
+function scalePair(sb, bb, factor) {
+  const newBb = round100(bb * factor);
+  const half = Math.abs(sb * 2 - bb) < 1;
+  const newSb = half ? Math.max(100, newBb / 2) : round100(newBb * (sb / bb));
+  return [newSb, newBb];
+}
+function showRow(row, st) {
+  const pair = scalePair(row[0], row[1], stackFactor(st));
+  return [pair[0], pair[1], row[2] ? pair[1] : 0];
+}
+function escapeHtml(text) {
+  return String(text || "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+}
+function newId() {
+  return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function cleanCash(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 18).map((player, index) => ({
+    id: String(player.id || ("p" + index)),
+    name: String(player.name || "").trim().slice(0, 40),
+    rebuys: Math.max(0, Math.round(Number(player.rebuys) || 0)),
+  })).filter((player) => player.name);
 }
 function fmt(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -560,17 +684,17 @@ function rowAt(index, column) {
 function nextInfo(st) {
   if (st.phase === "rebuy") {
     if (st.rebuyIndex < 7) {
-      const row = REBUY[st.rebuyIndex + 1];
+      const row = showRow(REBUY[st.rebuyIndex + 1], st);
       return "Дальше <b>уровень " + (st.rebuyIndex + 2) + "</b> · " + money(row[0]) + " / " + money(row[1]);
     }
     return "Дальше <b>перерыв 10:00</b> · аддон";
   }
   if (st.phase === "break") {
     const idx = st.skipFirst ? 1 : 0;
-    const row = rowAt(idx, st.column);
+    const row = showRow(rowAt(idx, st.column), st);
     return "Дальше <b>уровень " + (9 + idx) + "</b> · " + money(row[0]) + " / " + money(row[1]);
   }
-  const row = rowAt(st.freezeIndex + 1, st.column);
+  const row = showRow(rowAt(st.freezeIndex + 1, st.column), st);
   return "Дальше <b>уровень " + (10 + st.freezeIndex) + "</b> · " + money(row[0]) + " / " + money(row[1]);
 }
 function stackMath(st) {
@@ -580,8 +704,9 @@ function stackMath(st) {
   let alive = Number(st.alive);
   if (!alive || alive < 1) alive = players;
   if (players) alive = Math.max(1, Math.min(players, alive));
+  const plan = chipPlan(st.startStack);
   const addonOn = st.phase === "break" || st.phase === "freeze";
-  const total = players * 30000 + rebuys * 30000 + (addonOn ? addons * 40000 : 0);
+  const total = players * plan.start + rebuys * plan.rebuy + (addonOn ? addons * plan.addon : 0);
   const avg = players && alive ? Math.round(total / alive) : null;
   return { players: players, alive: alive, addons: addons, avg: avg };
 }
@@ -593,7 +718,7 @@ function suggestView(copy) {
   fillDerived(copy);
   if (copy.avg == null) return;
   copy.column = copy.suggested;
-  copy.skipFirst = copy.avg > 200000;
+  copy.skipFirst = copy.avg > bands(copy)[3];
 }
 function startView(copy, duration, now) {
   const at = Number(now);
@@ -703,12 +828,19 @@ function freshState() {
     runSince: 0,
     rev: 0,
     updatedAt: 0,
+    mode: "",
+    startStack: 30000,
+    addonStack: 40000,
+    buyIn: 0,
+    cashPlayers: [],
+    cashClosed: false,
   };
 }
 function fillDerived(st) {
   const math = stackMath(st);
+  const edge = bands(st);
   st.avg = math.avg;
-  st.suggested = math.avg == null ? 1 : math.avg <= 80000 ? 0 : math.avg <= 115000 ? 1 : math.avg <= 150000 ? 2 : 3;
+  st.suggested = math.avg == null ? 1 : math.avg <= edge[0] ? 0 : math.avg <= edge[1] ? 1 : math.avg <= edge[2] ? 2 : 3;
 }
 function beginFreeze(st, now) {
   suggestView(st);
@@ -718,9 +850,17 @@ function beginFreeze(st, now) {
 }
 function applyAction(st, kind, data) {
   const now = Date.now();
+  if (st.mode === "cash" && kind !== "reset" && kind !== "cashEdit" && kind !== "cashClose" && kind !== "startCash") return false;
   if (kind === "start" && st.phase === "idle") {
     const players = Math.max(0, Math.min(18, Number(data.players) || 0));
+    const plan = chipPlan(data.startStack);
     if (players < 2) return false;
+    st.mode = "tournament";
+    st.startStack = plan.start;
+    st.addonStack = plan.addon;
+    st.buyIn = 0;
+    st.cashPlayers = [];
+    st.cashClosed = false;
     st.players = players;
     st.alive = players;
     st.addons = 0;
@@ -817,6 +957,36 @@ function applyAction(st, kind, data) {
   if (kind === "skip") {
     st.skipFirst = !!data.skip;
     st.columnTouched = true;
+    return true;
+  }
+  if (kind === "startCash" && st.phase === "idle") {
+    const players = cleanCash(data.players);
+    const buyIn = Math.max(0, Math.round(Number(data.buyIn) || 0));
+    if (players.length < 2 || buyIn < 1) return false;
+    st.mode = "cash";
+    st.phase = "cash";
+    st.running = false;
+    st.runSince = 0;
+    st.buyIn = buyIn;
+    st.cashPlayers = players;
+    st.cashClosed = false;
+    st.players = players.length;
+    st.alive = players.length;
+    st.rebuys = 0;
+    st.addons = 0;
+    return true;
+  }
+  if (kind === "cashEdit" && st.mode === "cash" && !st.cashClosed) {
+    const players = cleanCash(data.players);
+    if (!players.length) return false;
+    st.cashPlayers = players;
+    st.players = players.length;
+    return true;
+  }
+  if (kind === "cashClose" && st.mode === "cash" && !st.cashClosed) {
+    st.cashClosed = true;
+    st.phase = "cash-end";
+    st.running = false;
     return true;
   }
   if (kind === "startFreeze" && st.phase === "break") {
@@ -933,7 +1103,7 @@ async function act(type, extra) {
   queueSave(next);
 }
 function paintColumns(st) {
-  const sig = st.column + ":" + st.suggested;
+  const sig = st.column + ":" + st.suggested + ":" + stackFactor(st);
   const box = $("colButtons");
   if (sig === colSig && box.children.length) return;
   colSig = sig;
@@ -941,7 +1111,7 @@ function paintColumns(st) {
   COLUMNS.forEach((col, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.innerHTML = col.name + "<small>" + col.hint + "</small>";
+    btn.innerHTML = bandName(i, st) + "<small>" + col.hint + "</small>";
     if (i === st.suggested) btn.classList.add("suggested");
     if (i === st.column) btn.classList.add("picked");
     btn.addEventListener("click", () => act("column", { column: i }));
@@ -962,20 +1132,23 @@ function paint() {
     queueSave(st);
   }
   const mark = [st.phase, st.rebuyIndex, st.freezeIndex].join(":");
-  if (seen && mark !== lastMark && st.phase !== "idle") levelChime();
+  if (seen && mark !== lastMark && st.phase !== "idle" && st.mode !== "cash") levelChime();
   if (mark !== lastMark) warned = false;
   lastMark = mark;
   seen = true;
   const idle = st.phase === "idle";
   const onBreak = st.phase === "break";
+  const onCash = st.mode === "cash";
   const left = leftMs(st);
   $("startScreen").hidden = !idle || !$("loginScreen").hidden;
   $("breakScreen").hidden = !onBreak;
-  $("playersField").hidden = !admin || !idle;
-  $("controls").hidden = !admin || idle || onBreak;
+  $("setup").hidden = !admin || !idle;
+  $("cashScreen").hidden = !onCash || !admin;
+  $("cashPrivate").hidden = !onCash || admin;
+  $("controls").hidden = !admin || idle || onBreak || onCash;
   $("breakAdmin").hidden = !admin;
   $("breakText").textContent = admin
-    ? "Укажите, сколько игроков ещё в игре и сколько взяли аддон. Если кто-то берёт ребай вместе с аддоном, добавьте его кнопкой +. Вылет начнётся по таймеру или сразу по кнопке."
+    ? "Укажите, сколько игроков ещё в игре и сколько взяли аддон. Если кто-то берёт ребай вместе с аддоном, добавьте его кнопкой +. Подсвеченная колонка рассчитана так, чтобы вылет закончился примерно за 2 часа."
     : "Идёт перерыв на аддон. Вылет начнёт ведущий.";
   $("clock").textContent = fmt(left);
   $("clock").classList.toggle("warn", !idle && !onBreak && left <= 60000);
@@ -1000,20 +1173,31 @@ function paint() {
   $("addonInput").max = String(st.alive || st.players || 18);
   $("avgOut").innerHTML = "Средний стек <b>" + (st.avg == null ? "—" : money(st.avg)) + "</b>";
   if (document.activeElement !== $("skipFirst")) $("skipFirst").checked = !!st.skipFirst;
+  $("skipText").textContent = "Средний стек выше " + money(bands(st)[3]) + " — начать вылет с уровня 10";
 
   const phase = $("phase");
+  if (onCash) {
+    phase.className = "phase";
+    $("phaseText").textContent = st.cashClosed ? "КЭШ ЗАВЕРШЁН" : "КЭШ";
+    $("levelTitle").textContent = "Кэш";
+    $("tableKicker").textContent = "КЭШ · " + (Array.isArray(st.cashPlayers) ? st.cashPlayers.length : 0) + " ИГРОКОВ";
+    $("elapsed").textContent = admin ? (st.cashClosed ? "Игра завершена" : "Учёт банка") : "Учёт у ведущего";
+    paintCash(st);
+    return;
+  }
   if (idle) {
     phase.className = "phase";
     $("phaseText").textContent = admin ? "ГОТОВО К СТАРТУ" : "ОЖИДАНИЕ";
     $("levelTitle").textContent = "Уровень 1";
-    $("sb").textContent = "100";
-    $("bb").textContent = "200";
+    const row = showRow(REBUY[0], st);
+    $("sb").textContent = money(row[0]);
+    $("bb").textContent = money(row[1]);
     $("ante").textContent = "—";
-    $("nextLine").innerHTML = "Дальше <b>уровень 2</b> · 200 / 400";
+    $("nextLine").innerHTML = "Дальше <b>уровень 2</b> · " + money(showRow(REBUY[1], st)[0]) + " / " + money(showRow(REBUY[1], st)[1]);
   } else if (st.phase === "rebuy") {
     phase.className = "phase open";
     $("phaseText").textContent = "РЕБАЙ ОТКРЫТ";
-    const row = REBUY[st.rebuyIndex];
+    const row = showRow(REBUY[st.rebuyIndex], st);
     $("levelTitle").textContent = "Уровень " + (st.rebuyIndex + 1);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
@@ -1023,16 +1207,17 @@ function paint() {
     phase.className = "phase";
     $("phaseText").textContent = "ПЕРЕРЫВ · АДДОН";
     $("levelTitle").textContent = "Перерыв";
-    $("sb").textContent = money(REBUY[7][0]);
-    $("bb").textContent = money(REBUY[7][1]);
+    const row = showRow(REBUY[7], st);
+    $("sb").textContent = money(row[0]);
+    $("bb").textContent = money(row[1]);
     $("ante").textContent = "—";
     $("nextLine").innerHTML = nextInfo(st);
     paintColumns(st);
   } else {
     phase.className = "phase closed";
     const col = COLUMNS[st.column] || COLUMNS[1];
-    $("phaseText").textContent = "ИГРА НА ВЫЛЕТ · " + col.name;
-    const row = rowAt(st.freezeIndex, st.column);
+    $("phaseText").textContent = "ИГРА НА ВЫЛЕТ · " + bandName(st.column, st);
+    const row = showRow(rowAt(st.freezeIndex, st.column), st);
     $("levelTitle").textContent = "Уровень " + (9 + st.freezeIndex);
     $("sb").textContent = money(row[0]);
     $("bb").textContent = money(row[1]);
@@ -1045,24 +1230,165 @@ function paint() {
   }
 }
 
+let cashSig = "";
+let setupMode = "tournament";
+let draft = [{ id: newId(), name: "" }, { id: newId(), name: "" }];
+function paintCash(st) {
+  const closed = !!st.cashClosed;
+  const buyIn = Math.max(0, Number(st.buyIn) || 0);
+  const rows = Array.isArray(st.cashPlayers) ? st.cashPlayers : [];
+  const total = rows.reduce((sum, player) => sum + (1 + Number(player.rebuys || 0)) * buyIn, 0);
+  $("cashLive").hidden = closed;
+  $("cashResult").hidden = !closed;
+  if (closed) {
+    $("cashTotal").textContent = money(total);
+    $("cashResultRows").innerHTML = rows.map((player) => {
+      const entries = 1 + Number(player.rebuys || 0);
+      return "<tr><td>" + escapeHtml(player.name) + "</td><td>" + Number(player.rebuys || 0) + "</td><td>" + money(entries * buyIn) + "</td></tr>";
+    }).join("");
+    return;
+  }
+  if ($("cashRows").contains(document.activeElement)) return;
+  const sig = JSON.stringify(rows) + ":" + buyIn;
+  if (sig === cashSig && $("cashRows").childElementCount) return;
+  cashSig = sig;
+  $("cashBuyLine").textContent = "Стартовый взнос " + money(buyIn) + ". Докуп стоит столько же.";
+  $("cashPot").textContent = "В банке " + money(total);
+  $("cashRows").innerHTML = rows.map((player) => {
+    const entries = 1 + Number(player.rebuys || 0);
+    return '<div class="cash-row" data-id="' + escapeHtml(player.id) + '">'
+      + '<input class="cash-name" value="' + escapeHtml(player.name) + '" aria-label="Имя">'
+      + '<span class="cash-meta">докупов <b>' + Number(player.rebuys || 0) + "</b> · " + money(entries * buyIn) + "</span>"
+      + '<span class="stepper"><button type="button" data-act="minus" aria-label="Меньше докупов">−</button>'
+      + '<button type="button" class="plus" data-act="plus" aria-label="Докуп">+</button></span>'
+      + '<button type="button" class="ghost" data-act="remove">Убрать</button></div>';
+  }).join("");
+}
+function readDraft() {
+  document.querySelectorAll(".draft-name").forEach((input) => {
+    const item = draft.find((player) => player.id === input.dataset.id);
+    if (item) item.name = input.value;
+  });
+}
+function renderDraft() {
+  $("cashNames").innerHTML = draft.map((player, index) => {
+    return '<div class="cash-row"><label>Игрок ' + (index + 1)
+      + '<input class="draft-name" data-id="' + escapeHtml(player.id) + '" value="' + escapeHtml(player.name) + '" placeholder="Имя"></label>'
+      + (draft.length > 2 ? '<button type="button" class="ghost" data-draft-remove="' + escapeHtml(player.id) + '">Убрать</button>' : "")
+      + "</div>";
+  }).join("");
+}
+function refreshPreview() {
+  const plan = chipPlan($("stackInput").value);
+  const row = scalePair(100, 200, plan.start / BASE_STACK);
+  $("stackPreview").textContent = "Ребай " + money(plan.rebuy) + " · аддон " + money(plan.addon) + " · первые блайнды " + money(row[0]) + " / " + money(row[1]);
+}
+function setSetupMode(mode) {
+  setupMode = mode;
+  $("modeTournament").classList.toggle("picked", mode === "tournament");
+  $("modeCash").classList.toggle("picked", mode === "cash");
+  $("tournamentSetup").hidden = mode !== "tournament";
+  $("cashSetup").hidden = mode !== "cash";
+  $("startBtn").textContent = mode === "cash" ? "Начать кэш" : "Начать турнир";
+}
 let startLock = 0;
 function onStart(event) {
   const now = Date.now();
   if (now - startLock < 700) return;
   startLock = now;
   if (event) event.preventDefault();
+  $("playersError").textContent = "";
+  if (setupMode === "cash") {
+    readDraft();
+    const players = draft.map((player) => ({ id: player.id, name: player.name.trim(), rebuys: 0 })).filter((player) => player.name);
+    const buyIn = Number($("buyInInput").value);
+    if (players.length < 2) {
+      $("playersError").textContent = "Введите имена минимум двух игроков";
+      return;
+    }
+    if (!buyIn || buyIn < 1) {
+      $("playersError").textContent = "Укажите стартовый взнос";
+      $("buyInInput").focus();
+      return;
+    }
+    unlockAudio();
+    act("startCash", { buyIn: buyIn, players: players });
+    return;
+  }
   const players = Number($("playersInput").value);
+  const plan = chipPlan($("stackInput").value);
   if (!players || players < 2) {
     $("playersError").textContent = "Укажите, сколько игроков за столом";
     $("playersInput").focus();
     return;
   }
-  $("playersError").textContent = "";
   unlockAudio();
-  act("start", { players: players });
+  act("start", { players: players, startStack: plan.start });
 }
 $("startBtn").addEventListener("pointerup", onStart);
 $("startBtn").addEventListener("click", onStart);
+$("modeTournament").addEventListener("click", () => setSetupMode("tournament"));
+$("modeCash").addEventListener("click", () => setSetupMode("cash"));
+$("stackInput").addEventListener("input", refreshPreview);
+$("addDraft").addEventListener("click", () => {
+  if (draft.length >= 18) return;
+  readDraft();
+  draft.push({ id: newId(), name: "" });
+  renderDraft();
+});
+$("cashNames").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-draft-remove]");
+  if (!button || draft.length <= 2) return;
+  readDraft();
+  draft = draft.filter((player) => player.id !== button.dataset.draftRemove);
+  renderDraft();
+});
+$("cashRows").addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button || !snapshot) return;
+  const row = button.closest(".cash-row");
+  const id = row && row.dataset.id;
+  const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player));
+  if (button.dataset.act === "remove") {
+    cashSig = "";
+    act("cashEdit", { players: list.filter((player) => player.id !== id) });
+    return;
+  }
+  const item = list.find((player) => player.id === id);
+  if (!item) return;
+  if (button.dataset.act === "plus") item.rebuys += 1;
+  if (button.dataset.act === "minus") item.rebuys = Math.max(0, item.rebuys - 1);
+  cashSig = "";
+  act("cashEdit", { players: list });
+});
+$("cashRows").addEventListener("change", (event) => {
+  if (!event.target.classList.contains("cash-name") || !snapshot) return;
+  const id = event.target.closest(".cash-row").dataset.id;
+  const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player));
+  const item = list.find((player) => player.id === id);
+  if (!item) return;
+  item.name = event.target.value;
+  cashSig = "";
+  act("cashEdit", { players: list });
+});
+$("cashAdd").addEventListener("click", () => {
+  if (!snapshot || (snapshot.cashPlayers || []).length >= 18) return;
+  const list = (snapshot.cashPlayers || []).map((player) => Object.assign({}, player));
+  list.push({ id: newId(), name: "Игрок " + (list.length + 1), rebuys: 0 });
+  cashSig = "";
+  act("cashEdit", { players: list });
+});
+$("cashClose").addEventListener("click", () => {
+  if (confirm("Завершить кэш и показать, кто сколько внёс?")) act("cashClose");
+});
+function resetGame() {
+  if (confirm("Сбросить игру и вернуться к выбору режима?")) {
+    cashSig = "";
+    act("reset");
+  }
+}
+$("cashReset").addEventListener("click", resetGame);
+$("cashAgain").addEventListener("click", resetGame);
 $("pauseBtn").addEventListener("click", () => { unlockAudio(); act(snapshot && snapshot.running ? "pause" : "resume"); });
 $("breakPause").addEventListener("click", () => { unlockAudio(); act(snapshot && snapshot.running ? "pause" : "resume"); });
 $("prevBtn").addEventListener("click", () => act("prev"));
@@ -1146,6 +1472,9 @@ window.addEventListener("pageshow", () => {
   if (snapshot) paint();
   pull().catch(() => {});
 });
+renderDraft();
+refreshPreview();
+setSetupMode("tournament");
 pollLoop();
 </script>
 </body>
